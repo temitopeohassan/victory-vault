@@ -34,7 +34,7 @@ export function Header() {
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <div className="w-10 h-10 rounded-lg overflow-hidden">
-            <Image src="/logo.png" alt="Victory Vautlt Logo" width={40} height={40} className="w-full h-full object-contain" />
+            <Image src="/logo.png" alt="Victory Vautlt Logo" width={60} height={60} className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">Victory  Vault</h1>
         </Link>
