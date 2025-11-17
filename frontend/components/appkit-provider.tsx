@@ -1,7 +1,7 @@
 'use client'
 
 import { createAppKit } from '@reown/appkit/react'
-import { base } from '@reown/appkit/networks'
+import { celo } from '@reown/appkit/networks'
 import { wagmiAdapter, projectId } from '@/lib/contracts/config'
 import { useEffect } from 'react'
 
@@ -37,7 +37,7 @@ export function AppKitProvider({ children }: { children: React.ReactNode }) {
       const instance = createAppKit({
         adapters: [wagmiAdapter],
         projectId,
-        networks: [base], // Base mainnet network
+        networks: [celo], // Celo mainnet network
         metadata,
         features: {
           analytics: true,

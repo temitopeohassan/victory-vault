@@ -4,3 +4,4 @@
 import type * as test from "./test";
 export type { test };
 export type { PredictionMarket } from "./PredictionMarket";
+export type { VictoryVault } from "./VictoryVault";

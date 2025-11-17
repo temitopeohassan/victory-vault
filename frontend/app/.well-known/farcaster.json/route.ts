@@ -12,7 +12,7 @@ export async function GET() {
       name: 'Victory  Vault',
       iconUrl: 'https://victoryvault-mu.vercel.app/icon.png',
       splashImageUrl: 'https://victoryvault-mu.vercel.app/splash.png',
-      splashBackgroundColor: '#A93445',
+      splashBackgroundColor: '#FFFFFF',
       homeUrl: 'https://victoryvault-mu.vercel.app/',
       imageUrl: 'https://victoryvault-mu.vercel.app/image.png',
       buttonTitle: 'Start Earning',

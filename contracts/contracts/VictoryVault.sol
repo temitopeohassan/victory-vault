@@ -2,10 +2,10 @@
 pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
-contract PredictionMarket is Ownable, ReentrancyGuard, Pausable {
+contract VictoryVault is Ownable, ReentrancyGuard, Pausable {
     enum Outcome { None, TeamA, TeamB, Draw }
 
     struct MatchInfo {
@@ -50,7 +50,7 @@ contract PredictionMarket is Ownable, ReentrancyGuard, Pausable {
     event PlatformFeesWithdrawn(address indexed recipient, uint256 amount);
     event MatchCreatedExistsGuard(bytes32 indexed id);
 
-    constructor(address _feeRecipient, uint16 _platformFeeBps) {
+    constructor(address _feeRecipient, uint16 _platformFeeBps) Ownable(msg.sender) {
         require(_feeRecipient != address(0), "feeRecipient=0");
         require(_platformFeeBps <= MAX_PLATFORM_FEE_BPS, "fee bps > max");
         feeRecipient = _feeRecipient;

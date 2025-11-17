@@ -12,6 +12,11 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {},
     localhost: { url: "http://127.0.0.1:8545" },
+    celo: {
+      url: process.env.CELO_RPC_URL || "https://forno.celo.org",
+      chainId: 42220,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    },
     base: {
       url: process.env.BASE_RPC_URL || "https://mainnet.base.org",
       chainId: 8453,

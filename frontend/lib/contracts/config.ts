@@ -1,5 +1,5 @@
 import { http, createConfig } from 'wagmi'
-import { base } from 'wagmi/chains'
+import { celo } from 'wagmi/chains'
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector'
 import { cookieStorage, createStorage } from '@wagmi/core'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
@@ -20,16 +20,16 @@ const wagmiAdapter = new WagmiAdapter({
   }),
   ssr: true,
   projectId,
-  networks: [base],
+  networks: [celo],
 })
 
 // Create wagmi config with Farcaster connector
 // The AppKit adapter will provide its connectors through the modal
 // We use the adapter's config as reference but create our own to include Farcaster
 export const wagmiConfig = createConfig({
-  chains: [base],
+  chains: [celo],
   transports: {
-    [base.id]: http(process.env.NEXT_PUBLIC_BASE_RPC_URL || 'https://mainnet.base.org'),
+    [celo.id]: http(process.env.NEXT_PUBLIC_CELO_RPC_URL || 'https://forno.celo.org'),
   },
   connectors: [
     farcasterMiniApp(), // Farcaster connector (used when inside Farcaster)

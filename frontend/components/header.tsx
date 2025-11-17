@@ -1,14 +1,27 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useWallet } from "@/lib/wallet-context"
 import { useFarcaster } from "@/lib/farcaster-context"
 import Link from "next/link"
 import Image from "next/image"
+import { WalletButton } from "@/components/wallet-button"
+
+// Helper to check if we're inside Farcaster
+function isInsideFarcaster(): boolean {
+  if (typeof window === 'undefined') return false
+  return !!(window as any).farcaster
+}
 
 export function Header() {
   const { isConnected, isConnecting, connectWallet, address } = useWallet()
   const farcaster = useFarcaster()
+  const [isInFarcaster, setIsInFarcaster] = useState(false)
+
+  // Check if we're inside Farcaster
+  useEffect(() => {
+    setIsInFarcaster(isInsideFarcaster())
+  }, [])
 
   // Auto-connect when running inside Farcaster
   useEffect(() => {
@@ -41,12 +54,17 @@ export function Header() {
 
         {/* Top navigation removed; replaced by a fixed footer tab bar */}
 
-        {/* Connected wallet (concatenated) */}
-        {(isConnected || farcaster.isWalletConnected) && displayAddress ? (
-          <span className="font-mono text-sm text-muted-foreground">
-            {displayAddress.slice(0, 6)}...{displayAddress.slice(-4)}
-          </span>
-        ) : null}
+        {/* Wallet button - only show outside Farcaster (uses AppKit) */}
+        {!isInFarcaster ? (
+          <WalletButton />
+        ) : (
+          /* Show address when in Farcaster */
+          (isConnected || farcaster.isWalletConnected) && displayAddress ? (
+            <span className="font-mono text-sm text-muted-foreground">
+              {displayAddress.slice(0, 6)}...{displayAddress.slice(-4)}
+            </span>
+          ) : null
+        )}
       </div>
     </header>
   )

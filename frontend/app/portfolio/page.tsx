@@ -26,6 +26,8 @@ export default function PortfolioPage() {
   })
   const [activeStakes, setActiveStakes] = useState<any[]>([])
   const [resolvedStakes, setResolvedStakes] = useState<any[]>([])
+  const [allMatches, setAllMatches] = useState<Match[]>([])
+  const [userStakes, setUserStakes] = useState<Stake[]>([])
 
   useEffect(() => {
     if (isConnected && address) {
@@ -129,6 +131,8 @@ export default function PortfolioPage() {
 
       setActiveStakes(formattedActive)
       setResolvedStakes(formattedResolved)
+      setAllMatches(allMatches)
+      setUserStakes(userStakes)
     } catch (err: any) {
       console.error('Failed to load portfolio:', err)
       setError(err.message || 'Failed to load portfolio data')
@@ -194,7 +198,10 @@ export default function PortfolioPage() {
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="mt-6">
-            <PortfolioChart />
+            <PortfolioChart 
+              stakes={userStakes} 
+              matches={allMatches} 
+            />
           </TabsContent>
 
           {/* Active Stakes Tab */}

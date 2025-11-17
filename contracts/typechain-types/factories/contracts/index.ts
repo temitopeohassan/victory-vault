@@ -3,3 +3,4 @@
 /* eslint-disable */
 export * as test from "./test";
 export { PredictionMarket__factory } from "./PredictionMarket__factory";
+export { VictoryVault__factory } from "./VictoryVault__factory";

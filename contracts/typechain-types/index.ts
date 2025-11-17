@@ -20,7 +20,13 @@ export type { IERC20Metadata } from "./@openzeppelin/contracts/token/ERC20/exten
 export { IERC20Metadata__factory } from "./factories/@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata__factory";
 export type { IERC20 } from "./@openzeppelin/contracts/token/ERC20/IERC20";
 export { IERC20__factory } from "./factories/@openzeppelin/contracts/token/ERC20/IERC20__factory";
+export type { Pausable } from "./@openzeppelin/contracts/utils/Pausable";
+export { Pausable__factory } from "./factories/@openzeppelin/contracts/utils/Pausable__factory";
+export type { ReentrancyGuard } from "./@openzeppelin/contracts/utils/ReentrancyGuard";
+export { ReentrancyGuard__factory } from "./factories/@openzeppelin/contracts/utils/ReentrancyGuard__factory";
 export type { PredictionMarket } from "./contracts/PredictionMarket";
 export { PredictionMarket__factory } from "./factories/contracts/PredictionMarket__factory";
 export type { MockERC20 } from "./contracts/test/MockERC20";
 export { MockERC20__factory } from "./factories/contracts/test/MockERC20__factory";
+export type { VictoryVault } from "./contracts/VictoryVault";
+export { VictoryVault__factory } from "./factories/contracts/VictoryVault__factory";
