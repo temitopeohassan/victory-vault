@@ -26,6 +26,14 @@ export function AppKitProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    // Warn if using default project ID
+    if (projectId === 'default') {
+      console.warn(
+        '⚠️ Reown AppKit is using "default" project ID. ' +
+        'Get a valid project ID from https://cloud.reown.com and set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in your environment variables.'
+      )
+    }
+
     const metadata = {
       name: 'Victory  Vault',
       description: 'Soccer Prediction Market',
@@ -40,7 +48,8 @@ export function AppKitProvider({ children }: { children: React.ReactNode }) {
         networks: [celo], // Celo mainnet network
         metadata,
         features: {
-          analytics: true,
+          // Disable analytics if using default project ID to reduce errors
+          analytics: projectId !== 'default',
         },
       })
 

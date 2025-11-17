@@ -3,14 +3,14 @@
 Hardhat project for the soccer prediction market.
 
 ## Contracts
-- `PredictionMarket.sol` — USDC staking, createMatch, stake, resolveMatch, claimReward, platform fee.
+- `VictoryVault.sol` — CELO staking, createMatch, stake, resolveMatch, claimReward, platform fee.
 
 ## Quickstart
 
 1. Copy the example env file and fill in your values:
 ```bash
 cp env.example .env
-# Edit .env with your private key, USDC address, and fee recipient
+# Edit .env with your private key, and fee recipient
 ```
 
 2. Install dependencies and compile:
@@ -19,9 +19,9 @@ npm install
 npm run build
 ```
 
-3. Deploy to Base mainnet:
+3. Deploy to Celo mainnet:
 ```bash
-npx hardhat run scripts/deploy.ts --network base
+npx hardhat run scripts/deploy.ts --network celo
 ```
 
 For local testing:
@@ -39,7 +39,7 @@ npm run deploy
 
 
 Save this address for your frontend .env:
-NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS=0xd8d5EC59A5e28Df6e9c1A5DAf5dC82F38Aea6442
-~/beyond-banter/contracts>
+NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS=0x5f98baDb7b5d3aFA246a3A637Ccb0529E6362287
+~/victoryvault/contracts>
 
 

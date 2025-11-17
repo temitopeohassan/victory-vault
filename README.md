@@ -1,6 +1,6 @@
 # Victory Vault
 
-A decentralized soccer prediction market built on Celo blockchain where users stake USDC tokens to predict match outcomes and share in the prize pool. Built with Next.js, Express, Firebase, and Solidity smart contracts.
+A decentralized soccer prediction market built on Celo blockchain where users stake Celo tokens to predict match outcomes and share in the prize pool. Built with Next.js, Express, Firebase, and Solidity smart contracts.
 
 ## 📖 Overview
 
@@ -23,7 +23,7 @@ The platform uses a smart contract-based system where stakes are locked until ma
 
 2. **Staking Interface**
    - Select your predicted outcome (Team A or Team B)
-   - Enter stake amount in USDC
+   - Enter stake amount in Celo
    - View potential winnings based on current odds
    - Confirm transaction via wallet connection
 
@@ -51,7 +51,7 @@ The platform uses a smart contract-based system where stakes are locked until ma
    - Click the "Connect Wallet" button in the header
    - Select your preferred wallet provider (MetaMask, WalletConnect, etc.)
    - Ensure you're connected to the Celo network
-   - Make sure you have USDC tokens in your wallet
+   - Make sure you have Celo tokens in your wallet
 
 2. **Browse Matches**
    - Navigate to the "Markets" tab (home page)
@@ -64,7 +64,7 @@ The platform uses a smart contract-based system where stakes are locked until ma
    - Odds are calculated as: `totalPool / poolForSelectedTeam`
 
 4. **Enter Stake Amount**
-   - Enter the amount of USDC you want to stake
+   - Enter the amount of Celo you want to stake
    - The interface will show your potential winnings
    - Potential winnings = `stakeAmount × currentOdds`
 
@@ -113,7 +113,7 @@ The platform uses a smart contract-based system where stakes are locked until ma
 4. **Transaction Confirmation**
    - Approve the claim transaction in your wallet
    - Wait for blockchain confirmation
-   - Your USDC rewards will be transferred to your wallet
+   - Your Celo rewards will be transferred to your wallet
 
 ### Draw Matches
 
@@ -136,7 +136,7 @@ The platform uses a smart contract-based system where stakes are locked until ma
 - **npm** or **yarn**
 - **Git**
 - **Firebase Account** (for backend)
-- **Celo Wallet** with testnet/mainnet USDC
+- **Celo Wallet** with testnet/mainnet Celo
 - **Hardhat** (for smart contract deployment)
 
 ---
@@ -335,9 +335,9 @@ Create a `.env` file in the `contracts` directory:
 # ⚠️  SECURITY WARNING: Keep this secret! Never share or commit this value.
 PRIVATE_KEY=your_wallet_private_key_here
 
-# USDC Token Address on Celo Mainnet
-# Native USDC on Celo: 0x765DE816845861e75A25fCA122bb6898B8B1282a
-USDC_ADDRESS=0x765DE816845861e75A25fCA122bb6898B8B1282a
+# Celo Token Address on Celo Mainnet
+# Native Celo on Celo: 0x765DE816845861e75A25fCA122bb6898B8B1282a
+Celo_ADDRESS=0x765DE816845861e75A25fCA122bb6898B8B1282a
 
 # Address that receives platform fees
 # If not set, defaults to deployer address
@@ -406,7 +406,7 @@ NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS=0xYourDeployedContractAddress
 You can verify the contract on CeloScan using Hardhat's verify plugin:
 
 ```bash
-npx hardhat verify --network celo <CONTRACT_ADDRESS> <USDC_ADDRESS> <FEE_RECIPIENT> <FEE_BPS>
+npx hardhat verify --network celo <CONTRACT_ADDRESS> <Celo_ADDRESS> <FEE_RECIPIENT> <FEE_BPS>
 ```
 
 ---
