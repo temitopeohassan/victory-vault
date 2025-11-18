@@ -44,6 +44,9 @@ export const wagmiConfig = createConfig({
 
 export const CONTRACT_ADDRESS = contractAddress || '0xd8d5EC59A5e28Df6e9c1A5DAf5dC82F38Aea6442' as `0x${string}`
 
+// Divvi Consumer Identifier (get from Divvi dashboard)
+export const DIVVI_CONSUMER = (process.env.NEXT_PUBLIC_DIVVI_CONSUMER || '0xaF108Dd1aC530F1c4BdED13f43E336A9cec92B44') as `0x${string}`
+
 // Export adapter and project ID for AppKit provider
 export { wagmiAdapter, projectId }
 

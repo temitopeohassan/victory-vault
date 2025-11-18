@@ -26,6 +26,45 @@ export function AppKitProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    // Filter WebSocket connection errors from WalletConnect relay
+    // These are often non-fatal retry attempts and can spam the console
+    // We'll filter them permanently but only for WalletConnect-specific errors
+    if (typeof window !== 'undefined' && !(window as any).__WALLETCONNECT_ERROR_FILTER_APPLIED__) {
+      const originalError = console.error
+      const originalWarn = console.warn
+
+      console.error = (...args: any[]) => {
+        const message = args[0]?.toString() || ''
+        // Filter WalletConnect WebSocket connection errors
+        if (
+          typeof message === 'string' &&
+          message.includes('WebSocket connection') &&
+          (message.includes('relay.walletconnect.org') || message.includes('relay.reown.com'))
+        ) {
+          // Silently ignore - these are often non-fatal retry attempts
+          return
+        }
+        originalError.apply(console, args)
+      }
+
+      console.warn = (...args: any[]) => {
+        const message = args[0]?.toString() || ''
+        // Filter WalletConnect WebSocket warnings
+        if (
+          typeof message === 'string' &&
+          message.includes('WebSocket') &&
+          (message.includes('relay.walletconnect.org') || message.includes('relay.reown.com'))
+        ) {
+          // Silently ignore
+          return
+        }
+        originalWarn.apply(console, args)
+      }
+
+      // Mark as applied to avoid multiple filters
+      ;(window as any).__WALLETCONNECT_ERROR_FILTER_APPLIED__ = true
+    }
+
     // Warn if using default project ID
     if (projectId === 'default') {
       console.warn(

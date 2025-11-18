@@ -1,5 +1,5 @@
 {
-  "name": "my-v0-project",
+  "name": "victory-vault",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,6 +9,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@divvi/referral-sdk": "^2.3.0",
     "@farcaster/miniapp-sdk": "^0.2.1",
     "@farcaster/miniapp-wagmi-connector": "^1.1.0",
     "@hookform/resolvers": "^3.10.0",

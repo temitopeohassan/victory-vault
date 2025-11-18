@@ -1,9 +1,12 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, CheckCircle2, AlertCircle } from "lucide-react"
+import { useClaimReward, useClaimRefund } from "@/lib/contracts/usePredictionMarket"
+import { useAccount } from "wagmi"
 
 interface Stake {
   id: string
@@ -19,6 +22,7 @@ interface Stake {
   placedAt: Date
   matchTime?: Date
   resolvedAt?: Date
+  matchResult?: string // 'teamA', 'teamB', or 'draw'
 }
 
 interface StakesTableProps {
@@ -27,6 +31,31 @@ interface StakesTableProps {
 }
 
 export function StakesTable({ stakes, type }: StakesTableProps) {
+  const { isConnected } = useAccount()
+  const { claimReward, isPending: isClaimingReward, isSuccess: isRewardClaimed, error: claimError } = useClaimReward()
+  const { claimRefund, isPending: isClaimingRefund, isSuccess: isRefundClaimed } = useClaimRefund()
+  const [claimingMatchId, setClaimingMatchId] = useState<string | null>(null)
+
+  const handleClaim = (stake: Stake) => {
+    if (!isConnected || !stake.matchId) return
+    
+    setClaimingMatchId(stake.matchId)
+    
+    // Check if match was a draw - use claimRefund
+    if (stake.matchResult === 'draw') {
+      claimRefund(stake.matchId)
+    } else {
+      // Otherwise use claimReward (only works if user won)
+      claimReward(stake.matchId)
+    }
+  }
+
+  // Reset claiming state after success
+  useEffect(() => {
+    if (isRewardClaimed || isRefundClaimed) {
+      setClaimingMatchId(null)
+    }
+  }, [isRewardClaimed, isRefundClaimed])
   const formatDate = (date: Date) => {
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
   }
@@ -50,6 +79,26 @@ export function StakesTable({ stakes, type }: StakesTableProps) {
         <CardTitle>{type === "active" ? "Active Stakes" : "Stake History"}</CardTitle>
       </CardHeader>
       <CardContent>
+        {/* Claim Error Message */}
+        {claimError && claimingMatchId && (
+          <div className="mb-4 flex gap-2 bg-destructive/10 border border-destructive/20 p-3 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-destructive">
+              {claimError.message || "Failed to claim. You may have already claimed or didn't win this match."}
+            </p>
+          </div>
+        )}
+
+        {/* Claim Success Message */}
+        {(isRewardClaimed || isRefundClaimed) && (
+          <div className="mb-4 flex gap-2 bg-accent/10 border border-accent/20 p-3 rounded-lg">
+            <CheckCircle2 className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-accent">
+              {isRefundClaimed ? "Refund claimed successfully!" : "Rewards claimed successfully!"}
+            </p>
+          </div>
+        )}
+
         <div className="space-y-3">
           {stakes.map((stake) => (
             <div
@@ -99,10 +148,31 @@ export function StakesTable({ stakes, type }: StakesTableProps) {
                   <p>{formatDate(type === "active" ? stake.matchTime! : stake.resolvedAt!)}</p>
                 </div>
 
-                {/* Action Button */}
-                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
+                {/* Claim Button (for resolved won stakes) or View Button */}
+                {type === "resolved" && stake.status === "won" && isConnected ? (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => handleClaim(stake)}
+                    disabled={isClaimingReward || isClaimingRefund || claimingMatchId === stake.matchId}
+                    className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                  >
+                    {isClaimingReward || isClaimingRefund ? "Claiming..." : "Claim"}
+                  </Button>
+                ) : type === "resolved" && stake.matchResult === "draw" && isConnected ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleClaim(stake)}
+                    disabled={isClaimingReward || isClaimingRefund || claimingMatchId === stake.matchId}
+                  >
+                    {isClaimingReward || isClaimingRefund ? "Claiming..." : "Claim Refund"}
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             </div>
           ))}

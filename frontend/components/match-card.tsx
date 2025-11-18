@@ -23,19 +23,15 @@ interface Match {
 export function MatchCard({ match }: { match: Match }) {
   const { address, isConnected } = useAccount()
   const { stake, isPending } = useStake()
-  const [stakeAmount, setStakeAmount] = useState("10")
+  const [stakeAmount] = useState("1") // Default stake amount in CELO
   const timeUntilStart = Math.max(0, Math.floor((match.startTime.getTime() - Date.now()) / 1000 / 60))
-  const poolAPercent = (match.poolA / match.totalPool) * 100
-  const poolBPercent = (match.poolB / match.totalPool) * 100
+  const poolAPercent = match.totalPool > 0 ? (match.poolA / match.totalPool) * 100 : 50
+  const poolBPercent = match.totalPool > 0 ? (match.poolB / match.totalPool) * 100 : 50
 
   const handleStake = (outcome: 1 | 2) => {
     if (!isConnected) return
-    // Convert match.id to bytes32
-    const matchIdBytes32 = match.id.startsWith('0x') 
-      ? match.id as `0x${string}`
-      : `0x${match.id.padStart(64, '0')}` as `0x${string}`
-    
-    stake(matchIdBytes32, outcome, stakeAmount)
+    // Outcome: 1 = TeamA, 2 = TeamB
+    stake(match.id, outcome, stakeAmount)
   }
 
   return (

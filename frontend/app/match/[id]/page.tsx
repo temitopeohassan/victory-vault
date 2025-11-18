@@ -80,6 +80,7 @@ export default function MatchPage() {
   // Format match for components
   const formattedMatch = {
     ...match,
+    id: match.id || matchId, // Ensure id is included
     startTime: match.startTime instanceof Date ? match.startTime : new Date(match.startTime),
     endTime: match.endTime ? (match.endTime instanceof Date ? match.endTime : new Date(match.endTime)) : undefined,
     odds: {

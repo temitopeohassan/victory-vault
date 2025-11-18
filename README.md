@@ -216,6 +216,11 @@ NEXT_PUBLIC_CELO_RPC_URL=https://forno.celo.org
 
 # Backend API URL
 NEXT_PUBLIC_API_URL=http://localhost:4000
+
+# Divvi Consumer Identifier (optional, defaults to example address)
+# Get your Divvi Consumer ID from the Divvi dashboard
+# This is used for referral tracking on all staking and claiming transactions
+NEXT_PUBLIC_DIVVI_CONSUMER=0xaF108Dd1aC530F1c4BdED13f43E336A9cec92B44
 ```
 
 **Note on Reown AppKit**: The `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is essential for Reown AppKit to work. You can get a free project ID by:

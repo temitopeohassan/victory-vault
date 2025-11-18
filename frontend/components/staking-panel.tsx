@@ -1,17 +1,21 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, CheckCircle2 } from "lucide-react"
+import { useStake } from "@/lib/contracts/usePredictionMarket"
+import { useAccount } from "wagmi"
 
 interface Match {
+  id: string
   teamA: string
   teamB: string
   odds: { teamA: number; teamB: number }
   totalPool: number
+  status: string
 }
 
 interface StakingPanelProps {
@@ -22,20 +26,26 @@ interface StakingPanelProps {
 
 export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanelProps) {
   const [stakeAmount, setStakeAmount] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
+  const { address, isConnected } = useAccount()
+  const { stake, isPending, isSuccess, error } = useStake()
 
   const selectedTeamName = selectedTeam === "A" ? match.teamA : selectedTeam === "B" ? match.teamB : null
   const selectedOdds = selectedTeam === "A" ? match.odds.teamA : selectedTeam === "B" ? match.odds.teamB : 0
   const potentialWinnings = stakeAmount ? (Number.parseFloat(stakeAmount) * selectedOdds).toFixed(2) : "0.00"
 
+  // Reset form on successful stake
+  useEffect(() => {
+    if (isSuccess) {
+      setStakeAmount("")
+      onSelectTeam(null)
+    }
+  }, [isSuccess, onSelectTeam])
+
   const handleStake = async () => {
-    if (!selectedTeam || !stakeAmount) return
-    setIsLoading(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setIsLoading(false)
-    setStakeAmount("")
-    onSelectTeam(null)
+    if (!selectedTeam || !stakeAmount || !isConnected) return
+    
+    const outcome = selectedTeam === "A" ? 1 : 2 // 1 = TeamA, 2 = TeamB
+    stake(match.id, outcome, stakeAmount)
   }
 
   return (
@@ -81,7 +91,7 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
 
             {/* Stake Amount Input */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Stake Amount (USDC)</label>
+              <label className="text-sm font-medium text-foreground">Stake Amount (CELO)</label>
               <Input
                 type="number"
                 placeholder="Enter amount"
@@ -89,11 +99,11 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
                 onChange={(e) => setStakeAmount(e.target.value)}
                 className="bg-input border-border text-foreground placeholder:text-muted-foreground"
                 min="0"
-                step="100"
+                step="0.1"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Min: $100</span>
-                <span>Max: $100,000</span>
+                <span>Min: 0.1 CELO</span>
+                <span>Enter amount in CELO</span>
               </div>
             </div>
 
@@ -118,6 +128,24 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
               </div>
             </div>
 
+            {/* Error Message */}
+            {error && (
+              <div className="flex gap-2 bg-destructive/10 border border-destructive/20 p-3 rounded-lg">
+                <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-destructive">
+                  {error.message || "Transaction failed. Please try again."}
+                </p>
+              </div>
+            )}
+
+            {/* Success Message */}
+            {isSuccess && (
+              <div className="flex gap-2 bg-accent/10 border border-accent/20 p-3 rounded-lg">
+                <CheckCircle2 className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-accent">Stake placed successfully!</p>
+              </div>
+            )}
+
             {/* Warning */}
             <div className="flex gap-2 bg-destructive/10 border border-destructive/20 p-3 rounded-lg">
               <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
@@ -127,12 +155,17 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
             {/* Stake Button */}
             <Button
               onClick={handleStake}
-              disabled={!stakeAmount || isLoading}
+              disabled={!stakeAmount || isPending || !isConnected || match.status !== 'active'}
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
               size="lg"
             >
-              {isLoading ? "Processing..." : "Confirm Stake"}
+              {isPending ? "Processing..." : isSuccess ? "Stake Placed!" : "Confirm Stake"}
             </Button>
+            {!isConnected && (
+              <p className="text-xs text-muted-foreground text-center">
+                Connect your wallet to stake
+              </p>
+            )}
           </>
         )}
 
