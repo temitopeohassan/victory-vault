@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   title: 'Victory  Vault - Soccer Prediction Market',
   description:
     'Decentralized soccer prediction market where users stake tokens on match outcomes',
+  icons: {
+    icon: '/favicon.ico',
+  },
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {

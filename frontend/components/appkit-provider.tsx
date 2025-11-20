@@ -35,6 +35,8 @@ export function AppKitProvider({ children }: { children: React.ReactNode }) {
 
       console.error = (...args: any[]) => {
         const message = args[0]?.toString() || ''
+        const fullMessage = args.map(arg => String(arg)).join(' ')
+        
         // Filter WalletConnect WebSocket connection errors
         if (
           typeof message === 'string' &&
@@ -44,11 +46,26 @@ export function AppKitProvider({ children }: { children: React.ReactNode }) {
           // Silently ignore - these are often non-fatal retry attempts
           return
         }
+        
+        // Filter Coinbase analytics errors
+        if (
+          (typeof message === 'string' || typeof fullMessage === 'string') &&
+          (fullMessage.includes('cca-lite.coinbase.com') ||
+           fullMessage.includes('Analytics SDK') ||
+           fullMessage.includes('Failed to fetch') ||
+           message.includes('ERR_NAME_NOT_RESOLVED'))
+        ) {
+          // Silently ignore Coinbase analytics errors
+          return
+        }
+        
         originalError.apply(console, args)
       }
 
       console.warn = (...args: any[]) => {
         const message = args[0]?.toString() || ''
+        const fullMessage = args.map(arg => String(arg)).join(' ')
+        
         // Filter WalletConnect WebSocket warnings
         if (
           typeof message === 'string' &&
@@ -58,7 +75,57 @@ export function AppKitProvider({ children }: { children: React.ReactNode }) {
           // Silently ignore
           return
         }
+        
+        // Filter font preload warnings from Reown AppKit
+        if (
+          (typeof message === 'string' || typeof fullMessage === 'string') &&
+          (fullMessage.includes('preloaded using link preload') ||
+           fullMessage.includes('fonts.reown.com') ||
+           fullMessage.includes('KHTeka'))
+        ) {
+          // Silently ignore font preload warnings
+          return
+        }
+        
         originalWarn.apply(console, args)
+      }
+
+      // Filter network errors for Coinbase analytics and other non-critical errors
+      const originalAddEventListener = window.addEventListener.bind(window)
+      window.addEventListener = function(type: string, listener: any, options?: any) {
+        if (type === 'error') {
+          const wrappedListener = (event: ErrorEvent) => {
+            // Filter Coinbase analytics network errors
+            if (
+              event.message?.includes('cca-lite.coinbase.com') ||
+              event.filename?.includes('installHook.js') ||
+              (event.error && String(event.error).includes('Analytics SDK')) ||
+              (event.error && String(event.error).includes('Failed to fetch'))
+            ) {
+              return // Silently ignore
+            }
+            listener(event)
+          }
+          return originalAddEventListener(type, wrappedListener, options)
+        }
+        return originalAddEventListener(type, listener, options)
+      }
+
+      // Also intercept unhandled promise rejections that might be from Coinbase SDK
+      const originalUnhandledRejection = window.onunhandledrejection
+      window.onunhandledrejection = function(event: PromiseRejectionEvent) {
+        const reason = event.reason?.toString() || ''
+        if (
+          reason.includes('cca-lite.coinbase.com') ||
+          reason.includes('Analytics SDK') ||
+          reason.includes('Failed to fetch')
+        ) {
+          event.preventDefault() // Prevent the error from showing in console
+          return
+        }
+        if (originalUnhandledRejection) {
+          originalUnhandledRejection.call(window, event)
+        }
       }
 
       // Mark as applied to avoid multiple filters
