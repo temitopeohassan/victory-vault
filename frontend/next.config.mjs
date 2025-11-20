@@ -6,6 +6,11 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Suppress _document error in App Router (not needed)
+  onDemandEntries: {
+    maxInactiveAge: 25 * 1000,
+    pagesBufferLength: 2,
+  },
   webpack: (config, { isServer, webpack }) => {
     // Ignore optional dependencies that aren't needed in browser
     if (!isServer) {
