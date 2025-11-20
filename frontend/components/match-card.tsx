@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Clock } from "lucide-react"
+import { Clock, AlertCircle } from "lucide-react"
 import { useStake } from "@/lib/contracts/usePredictionMarket"
 import { useAccount } from "wagmi"
 import { useState } from "react"
@@ -22,16 +22,22 @@ interface Match {
 
 export function MatchCard({ match }: { match: Match }) {
   const { address, isConnected } = useAccount()
-  const { stake, isPending } = useStake()
+  const { stake, isPending, error } = useStake()
   const [stakeAmount] = useState("1") // Default stake amount in CELO
   const timeUntilStart = Math.max(0, Math.floor((match.startTime.getTime() - Date.now()) / 1000 / 60))
   const poolAPercent = match.totalPool > 0 ? (match.poolA / match.totalPool) * 100 : 50
   const poolBPercent = match.totalPool > 0 ? (match.poolB / match.totalPool) * 100 : 50
 
-  const handleStake = (outcome: 1 | 2) => {
+  const handleStake = async (outcome: 1 | 2) => {
     if (!isConnected) return
-    // Outcome: 1 = TeamA, 2 = TeamB
-    stake(match.id, outcome, stakeAmount)
+    try {
+      // Outcome: 1 = TeamA, 2 = TeamB
+      // Ensure amount is a valid string for parseEther
+      await stake(match.id, outcome, stakeAmount)
+    } catch (err) {
+      // Error is handled by the hook and displayed via the error prop
+      console.error("Staking error:", err)
+    }
   }
 
   return (
@@ -96,6 +102,16 @@ export function MatchCard({ match }: { match: Match }) {
             </div>
           </div>
 
+          {/* Error Message */}
+          {error && (
+            <div className="flex gap-2 bg-destructive/10 border border-destructive/20 p-3 rounded-lg mb-2">
+              <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-destructive">
+                {error.message || "Transaction failed. Please ensure you have enough CELO (1 CELO + gas fees)."}
+              </p>
+            </div>
+          )}
+
           {/* Action Buttons */}
           <div className="grid grid-cols-2 gap-2">
             <Button
@@ -120,6 +136,11 @@ export function MatchCard({ match }: { match: Match }) {
           {!isConnected && (
             <p className="text-xs text-muted-foreground text-center mt-2">
               Connect wallet to stake
+            </p>
+          )}
+          {isConnected && (
+            <p className="text-xs text-muted-foreground text-center mt-1">
+              Stake amount: 1 CELO
             </p>
           )}
         </div>

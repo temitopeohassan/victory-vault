@@ -52,9 +52,41 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setIsClient(true)
     // Access AppKit instance from window (set by AppKitProvider)
     if (!isInFarcaster && typeof window !== 'undefined') {
-      const appKitInstance = (window as any).__REOWN_APPKIT_INSTANCE__
-      if (appKitInstance && appKitInstance.open) {
-        setAppKitOpen(() => appKitInstance.open.bind(appKitInstance))
+      const checkAppKit = () => {
+        // First, try the exposed open method from AppKitModalExposer
+        const appKitOpenMethod = (window as any).__REOWN_APPKIT_OPEN__
+        if (appKitOpenMethod && typeof appKitOpenMethod === 'function') {
+          setAppKitOpen(() => appKitOpenMethod)
+          return
+        }
+        
+        // Fallback: try to access from instance
+        const appKitInstance = (window as any).__REOWN_APPKIT_INSTANCE__
+        if (appKitInstance) {
+          // Try multiple ways to access the modal
+          if (appKitInstance.open) {
+            setAppKitOpen(() => appKitInstance.open.bind(appKitInstance))
+          } else if (appKitInstance.modal?.open) {
+            setAppKitOpen(() => appKitInstance.modal.open.bind(appKitInstance.modal))
+          } else if (appKitInstance.setOpen) {
+            setAppKitOpen(() => () => appKitInstance.setOpen(true))
+          } else if (typeof appKitInstance === 'function') {
+            // If the instance itself is a function (like openModal)
+            setAppKitOpen(() => appKitInstance)
+          }
+        }
+      }
+      
+      // Check immediately
+      checkAppKit()
+      
+      // Also check after a short delay in case AppKit initializes asynchronously
+      const timeoutId = setTimeout(checkAppKit, 100)
+      const timeoutId2 = setTimeout(checkAppKit, 500)
+      
+      return () => {
+        clearTimeout(timeoutId)
+        clearTimeout(timeoutId2)
       }
     }
   }, [isInFarcaster])
@@ -99,13 +131,51 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       } else {
         // Use AppKit modal for external connections
         if (!wagmiConnected) {
+          // First, try the exposed open method from AppKitModalExposer
+          const appKitOpenMethod = typeof window !== 'undefined' ? (window as any).__REOWN_APPKIT_OPEN__ : null
+          if (appKitOpenMethod && typeof appKitOpenMethod === 'function') {
+            appKitOpenMethod()
+            return
+          }
+          
+          // Try the stored appKitOpen function
           if (appKitOpen) {
             appKitOpen() // Open the AppKit connection modal
-          } else {
-            // Fallback: try to connect using wagmi's connect directly
-            if (connectors.length > 0) {
+            return
+          }
+          
+          // Try to get AppKit instance directly
+          if (typeof window !== 'undefined') {
+            const appKitInstance = (window as any).__REOWN_APPKIT_INSTANCE__
+            if (appKitInstance) {
+              // Try to open modal directly
+              if (appKitInstance.open) {
+                appKitInstance.open()
+                return
+              } else if (appKitInstance.modal?.open) {
+                appKitInstance.modal.open()
+                return
+              } else if (appKitInstance.setOpen) {
+                appKitInstance.setOpen(true)
+                return
+              }
+            }
+          }
+          
+          // Fallback: try to connect using wagmi's connect directly
+          // This will use the first available connector (usually injected wallets like MetaMask)
+          if (connectors.length > 0) {
+            // Filter out Farcaster connector when outside Farcaster
+            const nonFarcasterConnectors = connectors.filter(
+              (c) => c.id !== 'farcasterMiniApp' && c.id !== 'farcaster'
+            )
+            if (nonFarcasterConnectors.length > 0) {
+              connect({ connector: nonFarcasterConnectors[0] })
+            } else if (connectors.length > 0) {
               connect({ connector: connectors[0] })
             }
+          } else {
+            console.warn('No connectors available. Make sure AppKit is properly initialized.')
           }
           return
         }
@@ -113,7 +183,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Failed to connect wallet:", error)
     } finally {
-      setIsConnecting(false)
+      // Don't set isConnecting to false immediately - let wagmi handle the connection state
+      // The wagmiPending state will handle the loading state
+      setTimeout(() => setIsConnecting(false), 100)
     }
   }, [isInFarcaster, farcaster, wagmiConnected, appKitOpen, connect, connectors, isClient])
 

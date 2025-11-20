@@ -1,6 +1,6 @@
 'use client'
 
-import { createAppKit } from '@reown/appkit/react'
+import { createAppKit, useAppKit } from '@reown/appkit/react'
 import { celo } from '@reown/appkit/networks'
 import { wagmiAdapter, projectId } from '@/lib/contracts/config'
 import { useEffect } from 'react'
@@ -167,6 +167,32 @@ export function AppKitProvider({ children }: { children: React.ReactNode }) {
       console.warn('Failed to initialize AppKit:', error)
     }
   }, [])
+
+  return <AppKitModalExposer>{children}</AppKitModalExposer>
+}
+
+// Component to expose AppKit modal open method
+function AppKitModalExposer({ children }: { children: React.ReactNode }) {
+  // Check if we're in Farcaster
+  const isInFarcaster = typeof window !== 'undefined' && !!(window as any).farcaster
+  
+  // Use AppKit hook - must be called unconditionally
+  // The hook should return default values if AppKit isn't initialized
+  const appKit = useAppKit()
+
+  useEffect(() => {
+    if (!isInFarcaster && appKit && typeof window !== 'undefined') {
+      // Store the open method on window for wallet-context to access
+      if (appKit.open) {
+        ;(window as any).__REOWN_APPKIT_OPEN__ = () => {
+          appKit.open()
+        }
+      }
+    } else if (typeof window !== 'undefined') {
+      // Clear the method if we're in Farcaster or appKit is not available
+      delete (window as any).__REOWN_APPKIT_OPEN__
+    }
+  }, [appKit, isInFarcaster])
 
   return <>{children}</>
 }
