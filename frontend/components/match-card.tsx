@@ -66,7 +66,7 @@ export function MatchCard({ match }: { match: Match }) {
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-foreground font-medium">{match.teamA}</span>
-            <span className="text-muted-foreground">${match.poolA.toLocaleString()}</span>
+            <span className="text-muted-foreground">{match.poolA.toFixed(2)} CELO</span>
           </div>
           <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
             <div className="bg-primary h-full transition-all" style={{ width: `${poolAPercent}%` }} />
@@ -76,7 +76,7 @@ export function MatchCard({ match }: { match: Match }) {
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-foreground font-medium">{match.teamB}</span>
-            <span className="text-muted-foreground">${match.poolB.toLocaleString()}</span>
+            <span className="text-muted-foreground">{match.poolB.toFixed(2)} CELO</span>
           </div>
           <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
             <div className="bg-secondary h-full transition-all" style={{ width: `${poolBPercent}%` }} />
@@ -87,7 +87,7 @@ export function MatchCard({ match }: { match: Match }) {
         <div className="pt-2 border-t border-border">
           <div className="flex justify-between items-center mb-3">
             <span className="text-sm text-muted-foreground">Total Pool</span>
-            <span className="font-semibold text-foreground">${match.totalPool.toLocaleString()}</span>
+            <span className="font-semibold text-foreground">{match.totalPool.toFixed(2)} CELO</span>
           </div>
 
           {/* Odds */}
@@ -113,21 +113,29 @@ export function MatchCard({ match }: { match: Match }) {
           )}
 
           {/* Action Buttons */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 relative z-10">
             <Button
               variant="outline"
-              className="border-primary text-primary hover:bg-primary/10 bg-transparent"
+              className="border-primary text-primary hover:bg-primary/10 bg-transparent cursor-pointer"
               size="sm"
-              onClick={() => handleStake(1)}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleStake(1)
+              }}
               disabled={!isConnected || isPending || match.status !== 'active'}
             >
               {isPending ? 'Staking...' : `Stake ${match.teamA.split(" ")[0]}`}
             </Button>
             <Button
               variant="outline"
-              className="border-secondary text-secondary hover:bg-secondary/10 bg-transparent"
+              className="border-secondary text-secondary hover:bg-secondary/10 bg-transparent cursor-pointer"
               size="sm"
-              onClick={() => handleStake(2)}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleStake(2)
+              }}
               disabled={!isConnected || isPending || match.status !== 'active'}
             >
               {isPending ? 'Staking...' : `Stake ${match.teamB.split(" ")[0]}`}

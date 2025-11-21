@@ -39,7 +39,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const { address: wagmiAddress, isConnected: wagmiConnected, connector } = useAccount()
   const { connect, connectors, isPending: wagmiPending } = useConnect()
   const { disconnect } = useDisconnect()
-  const { data: wagmiBalance } = useBalance({ address: wagmiAddress })
+  // Fetch native CELO balance (not token balance)
+  const { data: wagmiBalance } = useBalance({ 
+    address: wagmiAddress,
+    // No token address means native token (CELO)
+  })
   
   // Determine if we're inside Farcaster
   const isInFarcaster = isInsideFarcaster()
@@ -103,6 +107,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const balance = isInFarcaster
     ? farcaster.walletBalance ? parseFloat(farcaster.walletBalance) : 0
     : wagmiBalance ? parseFloat(wagmiBalance.formatted) : 0
+
+  // Refresh balance when wallet connects or address changes
+  useEffect(() => {
+    if (isInFarcaster && isConnected && farcaster.isWalletConnected && farcaster.requestWalletBalance) {
+      // Refresh Farcaster wallet balance
+      farcaster.requestWalletBalance().catch((err) => {
+        console.warn('Failed to refresh Farcaster balance:', err)
+      })
+    }
+  }, [isInFarcaster, isConnected, farcaster.isWalletConnected, address])
 
   // Sync with Farcaster wallet when available
   useEffect(() => {

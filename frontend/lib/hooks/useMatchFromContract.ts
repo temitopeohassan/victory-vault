@@ -24,9 +24,9 @@ export function useMatchFromContract(matchId: string) {
       endTime: endTime ? new Date(Number(endTime) * 1000) : null,
       resolved: Boolean(resolved),
       result: Number(result), // 0=None, 1=TeamA, 2=TeamB, 3=Draw
-      totalPool: Number(formatUnits(totalPool, 6)), // USDC uses 6 decimals
-      poolA: Number(formatUnits(poolA, 6)),
-      poolB: Number(formatUnits(poolB, 6)),
+      totalPool: Number(formatUnits(totalPool, 18)), // CELO uses 18 decimals
+      poolA: Number(formatUnits(poolA, 18)),
+      poolB: Number(formatUnits(poolB, 18)),
       status: resolved ? 'resolved' : Number(startTime) > Math.floor(Date.now() / 1000) ? 'upcoming' : 'active',
       odds: {
         teamA: Number(poolA) > 0 ? Number(totalPool) / Number(poolA) : 1,
