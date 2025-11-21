@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge"
 import { Clock, AlertCircle } from "lucide-react"
 import { useStake } from "@/lib/contracts/usePredictionMarket"
 import { useAccount } from "wagmi"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useMatchFromContract } from "@/lib/hooks/useMatchFromContract"
 
 interface Match {
   id: string
@@ -24,9 +25,17 @@ export function MatchCard({ match }: { match: Match }) {
   const { address, isConnected } = useAccount()
   const { stake, isPending, error } = useStake()
   const [stakeAmount] = useState("1") // Default stake amount in CELO
-  const timeUntilStart = Math.max(0, Math.floor((match.startTime.getTime() - Date.now()) / 1000 / 60))
-  const poolAPercent = match.totalPool > 0 ? (match.poolA / match.totalPool) * 100 : 50
-  const poolBPercent = match.totalPool > 0 ? (match.poolB / match.totalPool) * 100 : 50
+  
+  // Try to fetch match data from contract to get actual CELO values
+  const { match: contractMatch, isLoading: isLoadingContract } = useMatchFromContract(match.id)
+  
+  // Use contract data if available, otherwise fall back to API data
+  // Note: API returns USD values, contract returns CELO values
+  const displayMatch = contractMatch || match
+  
+  const timeUntilStart = Math.max(0, Math.floor((displayMatch.startTime.getTime() - Date.now()) / 1000 / 60))
+  const poolAPercent = displayMatch.totalPool > 0 ? (displayMatch.poolA / displayMatch.totalPool) * 100 : 50
+  const poolBPercent = displayMatch.totalPool > 0 ? (displayMatch.poolB / displayMatch.totalPool) * 100 : 50
 
   const handleStake = async (outcome: 1 | 2) => {
     if (!isConnected) return
@@ -41,16 +50,16 @@ export function MatchCard({ match }: { match: Match }) {
   }
 
   return (
-    <Card className="hover:shadow-lg transition-shadow">
+    <Card className="hover:shadow-lg transition-shadow relative">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <h3 className="font-semibold text-foreground text-lg">{match.teamA}</h3>
+            <h3 className="font-semibold text-foreground text-lg">{displayMatch.teamA}</h3>
             <p className="text-sm text-muted-foreground">vs</p>
-            <h3 className="font-semibold text-foreground text-lg">{match.teamB}</h3>
+            <h3 className="font-semibold text-foreground text-lg">{displayMatch.teamB}</h3>
           </div>
           <Badge variant="outline" className="bg-accent/10 text-accent border-accent">
-            {match.status}
+            {displayMatch.status}
           </Badge>
         </div>
       </CardHeader>
@@ -65,8 +74,10 @@ export function MatchCard({ match }: { match: Match }) {
         {/* Pool Distribution */}
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-foreground font-medium">{match.teamA}</span>
-            <span className="text-muted-foreground">{match.poolA.toFixed(2)} CELO</span>
+            <span className="text-foreground font-medium">{displayMatch.teamA}</span>
+            <span className="text-muted-foreground">
+              {isLoadingContract ? '...' : `${displayMatch.poolA.toFixed(2)} CELO`}
+            </span>
           </div>
           <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
             <div className="bg-primary h-full transition-all" style={{ width: `${poolAPercent}%` }} />
@@ -75,8 +86,10 @@ export function MatchCard({ match }: { match: Match }) {
 
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-foreground font-medium">{match.teamB}</span>
-            <span className="text-muted-foreground">{match.poolB.toFixed(2)} CELO</span>
+            <span className="text-foreground font-medium">{displayMatch.teamB}</span>
+            <span className="text-muted-foreground">
+              {isLoadingContract ? '...' : `${displayMatch.poolB.toFixed(2)} CELO`}
+            </span>
           </div>
           <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
             <div className="bg-secondary h-full transition-all" style={{ width: `${poolBPercent}%` }} />
@@ -87,18 +100,20 @@ export function MatchCard({ match }: { match: Match }) {
         <div className="pt-2 border-t border-border">
           <div className="flex justify-between items-center mb-3">
             <span className="text-sm text-muted-foreground">Total Pool</span>
-            <span className="font-semibold text-foreground">{match.totalPool.toFixed(2)} CELO</span>
+            <span className="font-semibold text-foreground">
+              {isLoadingContract ? '...' : `${displayMatch.totalPool.toFixed(2)} CELO`}
+            </span>
           </div>
 
           {/* Odds */}
           <div className="grid grid-cols-2 gap-2 mb-4">
             <div className="bg-muted p-2 rounded text-center">
               <p className="text-xs text-muted-foreground">Odds</p>
-              <p className="font-semibold text-foreground">{match.odds.teamA.toFixed(2)}</p>
+              <p className="font-semibold text-foreground">{displayMatch.odds.teamA.toFixed(2)}</p>
             </div>
             <div className="bg-muted p-2 rounded text-center">
               <p className="text-xs text-muted-foreground">Odds</p>
-              <p className="font-semibold text-foreground">{match.odds.teamB.toFixed(2)}</p>
+              <p className="font-semibold text-foreground">{displayMatch.odds.teamB.toFixed(2)}</p>
             </div>
           </div>
 
@@ -113,32 +128,40 @@ export function MatchCard({ match }: { match: Match }) {
           )}
 
           {/* Action Buttons */}
-          <div className="grid grid-cols-2 gap-2 relative z-10">
+          <div className="grid grid-cols-2 gap-2 relative" style={{ zIndex: 10, pointerEvents: 'auto' }}>
             <Button
               variant="outline"
-              className="border-primary text-primary hover:bg-primary/10 bg-transparent cursor-pointer"
+              className="border-primary text-primary hover:bg-primary/10 bg-transparent cursor-pointer relative z-10"
               size="sm"
+              type="button"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                handleStake(1)
+                if (!isPending && isConnected && displayMatch.status === 'active') {
+                  handleStake(1)
+                }
               }}
-              disabled={!isConnected || isPending || match.status !== 'active'}
+              disabled={!isConnected || isPending || displayMatch.status !== 'active'}
+              style={{ pointerEvents: 'auto' }}
             >
-              {isPending ? 'Staking...' : `Stake ${match.teamA.split(" ")[0]}`}
+              {isPending ? 'Staking...' : `Stake ${displayMatch.teamA.split(" ")[0]}`}
             </Button>
             <Button
               variant="outline"
-              className="border-secondary text-secondary hover:bg-secondary/10 bg-transparent cursor-pointer"
+              className="border-secondary text-secondary hover:bg-secondary/10 bg-transparent cursor-pointer relative z-10"
               size="sm"
+              type="button"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                handleStake(2)
+                if (!isPending && isConnected && displayMatch.status === 'active') {
+                  handleStake(2)
+                }
               }}
-              disabled={!isConnected || isPending || match.status !== 'active'}
+              disabled={!isConnected || isPending || displayMatch.status !== 'active'}
+              style={{ pointerEvents: 'auto' }}
             >
-              {isPending ? 'Staking...' : `Stake ${match.teamB.split(" ")[0]}`}
+              {isPending ? 'Staking...' : `Stake ${displayMatch.teamB.split(" ")[0]}`}
             </Button>
           </div>
           {!isConnected && (

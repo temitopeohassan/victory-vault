@@ -18,6 +18,7 @@ export function useMatchFromContract(matchId: string) {
     const [teamA, teamB, startTime, endTime, resolved, result, totalPool, poolA, poolB] = data
 
     return {
+      id: matchId, // Use the original matchId
       teamA,
       teamB,
       startTime: new Date(Number(startTime) * 1000),
