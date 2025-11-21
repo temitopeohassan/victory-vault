@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useReadContract, useSendTransaction, useWaitForTransactionReceipt, useAccount, useChainId, useSwitchChain } from 'wagmi'
+import { getAccount } from 'wagmi/actions'
 import { CONTRACT_ADDRESS, DIVVI_CONSUMER } from './config'
 import { formatEther, parseEther, encodeFunctionData } from 'viem'
 import { celo } from 'wagmi/chains'
@@ -70,7 +71,7 @@ export function useMatchData(matchId: `0x${string}` | string) {
 }
 
 export function useStake() {
-  const { address, chainId: currentChainId } = useAccount()
+  const { address, chainId: currentChainId, chain } = useAccount()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
   const { sendTransaction, data: hash, isPending, error } = useSendTransaction()
@@ -94,26 +95,85 @@ export function useStake() {
       throw new Error('Wallet not connected')
     }
 
-    // Ensure we're on Celo chain before sending transaction
-    const activeChainId = currentChainId || chainId
-    if (activeChainId !== celo.id) {
+    // Get the current chain ID - check multiple sources for reliability
+    // Use getAccount to get the latest chain state
+    const account = getAccount()
+    const activeChainId = account.chainId || currentChainId || chainId || chain?.id
+    console.log('Current chain ID:', activeChainId, 'Expected Celo:', celo.id)
+    
+    // CRITICAL: Ensure we're on Celo chain before sending transaction
+    // If not on Celo, the transaction will be sent on the wrong network (e.g., Ethereum)
+    if (activeChainId && activeChainId !== celo.id) {
+      console.warn(`Wallet is on chain ${activeChainId}, but transaction requires Celo (${celo.id})`)
+      
       try {
-        console.log(`Switching from chain ${activeChainId} to Celo (${celo.id})`)
+        console.log(`Attempting to switch from chain ${activeChainId} to Celo (${celo.id})`)
         await switchChain({ chainId: celo.id })
-        // Wait a bit for chain switch to complete
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        // Verify chain switch was successful
-        const newChainId = currentChainId || chainId
-        if (newChainId !== celo.id) {
-          throw new Error('Failed to switch to Celo network. Please switch manually.')
+        
+        // Wait for chain switch to complete and verify
+        // Poll for chain change since hooks might not update immediately
+        let attempts = 0
+        const maxAttempts = 15
+        let switched = false
+        
+        while (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 300))
+          // Re-check the chain using getAccount to get fresh state
+          const updatedAccount = getAccount()
+          const latestChainId = updatedAccount.chainId
+          
+          if (latestChainId === celo.id) {
+            console.log('Successfully switched to Celo')
+            switched = true
+            break
+          }
+          attempts++
+        }
+        
+        // Final check before proceeding
+        if (!switched) {
+          const finalAccount = getAccount()
+          const finalChainId = finalAccount.chainId
+          if (finalChainId !== celo.id) {
+            throw new Error(
+              'Failed to switch to Celo network. ' +
+              'Please manually switch your wallet to Celo network before staking. ' +
+              `Current network: ${finalChainId || activeChainId}, Required: ${celo.id}. ` +
+              'The transaction requires CELO, not ETH.'
+            )
+          }
         }
       } catch (err: any) {
         console.error('Chain switch error:', err)
-        if (err?.message?.includes('User rejected')) {
-          throw new Error('Please approve the network switch to Celo to continue')
+        if (err?.message?.includes('User rejected') || err?.message?.includes('rejected')) {
+          throw new Error(
+            'Network switch was rejected. ' +
+            'Please switch your wallet to Celo network manually, then try again. ' +
+            'The transaction requires CELO, not ETH.'
+          )
         }
-        throw new Error('Please switch to Celo network to stake. The transaction requires CELO, not ETH.')
+        throw new Error(
+          'Please switch your wallet to Celo network to stake. ' +
+          'The transaction requires CELO, not ETH. ' +
+          `Current network: ${activeChainId}, Required: ${celo.id}`
+        )
       }
+    } else if (!activeChainId) {
+      // If we can't determine the chain, it's safer to throw an error
+      throw new Error(
+        'Unable to determine current network. ' +
+        'Please ensure your wallet is connected to Celo network before staking.'
+      )
+    }
+    
+    // Double-check chain right before sending transaction
+    const preSendAccount = getAccount()
+    const preSendChainId = preSendAccount.chainId
+    if (preSendChainId && preSendChainId !== celo.id) {
+      throw new Error(
+        `Transaction cannot be sent: Wallet is on network ${preSendChainId}, but Celo (${celo.id}) is required. ` +
+        'Please switch your wallet to Celo network and try again. The transaction requires CELO, not ETH.'
+      )
     }
 
     // VictoryVault uses native CELO (18 decimals)

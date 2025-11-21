@@ -82,8 +82,8 @@ export function WalletButton() {
         </div>
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5">
-          <p className="text-xs text-muted-foreground mb-1">USDC Balance</p>
-          <p className="text-lg font-bold text-foreground">${balance.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground mb-1">CELO Balance</p>
+          <p className="text-lg font-bold text-foreground">{balance.toLocaleString()} CELO</p>
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleCopyAddress} className="cursor-pointer">
