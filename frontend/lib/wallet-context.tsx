@@ -28,20 +28,43 @@ function isInsideFarcaster(): boolean {
 }
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
+  console.log('[WalletContext] WalletProvider rendered')
+  
   const [isConnecting, setIsConnecting] = useState(false)
   
   // Farcaster integration
   const farcaster = useFarcaster()
+  console.log('[WalletContext] Farcaster context', {
+    isWalletConnected: farcaster.isWalletConnected,
+    walletAddress: farcaster.walletAddress,
+    walletBalance: farcaster.walletBalance,
+    hasSDK: !!farcaster.sdk
+  })
+  
   const [isFarcasterWallet, setIsFarcasterWallet] = useState(false)
   const [farcasterUser, setFarcasterUser] = useState<any | null>(null)
   
   // Wagmi hooks for external wallet connections
   const { address: wagmiAddress, isConnected: wagmiConnected, connector, chainId } = useAccount()
+  console.log('[WalletContext] useAccount state', {
+    wagmiAddress,
+    wagmiConnected,
+    connector: connector?.name,
+    chainId
+  })
+  
   const { connect, connectors, isPending: wagmiPending } = useConnect()
+  console.log('[WalletContext] useConnect state', {
+    isPending: wagmiPending,
+    connectorsCount: connectors.length,
+    connectorIds: connectors.map(c => c.id)
+  })
+  
   const { disconnect } = useDisconnect()
+  
   // Fetch native CELO balance (not token balance)
   // Explicitly fetch native token balance by not providing token address
-  const { data: wagmiBalance, refetch: refetchBalance } = useBalance({ 
+  const { data: wagmiBalance, refetch: refetchBalance, isLoading: isLoadingBalance, error: balanceError } = useBalance({ 
     address: wagmiAddress,
     // No token address means native token (CELO on Celo network)
     query: {
@@ -50,8 +73,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   })
   
+  console.log('[WalletContext] useBalance state', {
+    wagmiBalance,
+    isLoadingBalance,
+    balanceError,
+    enabled: !!wagmiAddress && wagmiConnected,
+    hasBalance: !!wagmiBalance,
+    balanceFormatted: wagmiBalance?.formatted,
+    balanceValue: wagmiBalance?.value?.toString(),
+    balanceSymbol: wagmiBalance?.symbol,
+    balanceDecimals: wagmiBalance?.decimals
+  })
+  
   // Determine if we're inside Farcaster
   const isInFarcaster = isInsideFarcaster()
+  console.log('[WalletContext] Environment check', { isInFarcaster })
   
   // Access AppKit without using the hook to avoid SSR issues
   const [appKitOpen, setAppKitOpen] = useState<(() => void) | null>(null)
@@ -108,40 +144,73 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     ? farcaster.walletAddress
     : wagmiAddress
 
+  console.log('[WalletContext] Connection state', {
+    isInFarcaster,
+    isConnected,
+    address,
+    source: isInFarcaster ? 'farcaster' : 'wagmi'
+  })
+
   // Get balance from appropriate source
   const balance = useMemo(() => {
+    console.log('[WalletContext] Computing balance', { isInFarcaster })
+    
     if (isInFarcaster) {
       const bal = farcaster.walletBalance ? parseFloat(farcaster.walletBalance) : 0
-      if (bal > 0) console.log('Farcaster balance:', bal)
+      console.log('[WalletContext] Farcaster balance computed', {
+        rawBalance: farcaster.walletBalance,
+        parsedBalance: bal
+      })
       return bal
     } else {
       const bal = wagmiBalance ? parseFloat(wagmiBalance.formatted) : 0
-      if (wagmiBalance) {
-        console.log('Wagmi balance:', {
-          formatted: wagmiBalance.formatted,
-          value: wagmiBalance.value?.toString(),
-          decimals: wagmiBalance.decimals,
-          symbol: wagmiBalance.symbol
-        })
-      }
+      console.log('[WalletContext] Wagmi balance computed', {
+        wagmiBalance,
+        formatted: wagmiBalance?.formatted,
+        parsedBalance: bal,
+        value: wagmiBalance?.value?.toString(),
+        decimals: wagmiBalance?.decimals,
+        symbol: wagmiBalance?.symbol
+      })
       return bal
     }
   }, [isInFarcaster, farcaster.walletBalance, wagmiBalance])
+  
+  console.log('[WalletContext] Final balance value', { balance })
 
   // Refresh balance when wallet connects or address changes
   useEffect(() => {
+    console.log('[WalletContext] Balance refresh effect triggered', {
+      isInFarcaster,
+      isConnected,
+      farcasterConnected: farcaster.isWalletConnected,
+      hasRequestBalance: !!farcaster.requestWalletBalance,
+      wagmiConnected,
+      wagmiAddress,
+      hasRefetch: !!refetchBalance,
+      address
+    })
+    
     if (isInFarcaster && isConnected && farcaster.isWalletConnected && farcaster.requestWalletBalance) {
+      console.log('[WalletContext] Refreshing Farcaster balance')
       // Refresh Farcaster wallet balance
-      farcaster.requestWalletBalance().catch((err) => {
-        console.warn('Failed to refresh Farcaster balance:', err)
+      farcaster.requestWalletBalance().then((balance) => {
+        console.log('[WalletContext] Farcaster balance refreshed', { balance })
+      }).catch((err) => {
+        console.warn('[WalletContext] Failed to refresh Farcaster balance:', err)
       })
     } else if (!isInFarcaster && wagmiConnected && wagmiAddress && refetchBalance) {
+      console.log('[WalletContext] Refreshing wagmi balance')
       // Refresh wagmi balance when connected
-      refetchBalance().catch((err) => {
-        console.warn('Failed to refresh wagmi balance:', err)
+      refetchBalance().then((result) => {
+        console.log('[WalletContext] Wagmi balance refreshed', { result })
+      }).catch((err) => {
+        console.warn('[WalletContext] Failed to refresh wagmi balance:', err)
       })
+    } else {
+      console.log('[WalletContext] Balance refresh skipped - conditions not met')
     }
-  }, [isInFarcaster, isConnected, farcaster.isWalletConnected, address, wagmiConnected, wagmiAddress, refetchBalance])
+  }, [isInFarcaster, isConnected, farcaster.isWalletConnected, address, wagmiConnected, wagmiAddress, refetchBalance, farcaster])
 
   // Sync with Farcaster wallet when available
   useEffect(() => {
@@ -158,16 +227,29 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [isInFarcaster, farcaster.isWalletConnected, farcaster.walletAddress, farcaster.user])
 
   const connectWallet = useCallback(async () => {
+    console.log('[WalletContext] connectWallet called', { isInFarcaster, wagmiConnected })
     setIsConnecting(true)
     try {
       if (isInFarcaster) {
+        console.log('[WalletContext] Connecting Farcaster wallet', {
+          hasSDK: !!farcaster.sdk,
+          isWalletConnected: farcaster.isWalletConnected
+        })
         // Try Farcaster wallet if inside Farcaster
         if (farcaster.sdk && !farcaster.isWalletConnected) {
+          console.log('[WalletContext] Calling farcaster.connectWallet()')
           await farcaster.connectWallet()
+          console.log('[WalletContext] Farcaster wallet connected')
           // The useEffect above will handle the state updates
           return
+        } else {
+          console.log('[WalletContext] Cannot connect Farcaster wallet', {
+            hasSDK: !!farcaster.sdk,
+            isWalletConnected: farcaster.isWalletConnected
+          })
         }
       } else {
+        console.log('[WalletContext] Connecting external wallet via AppKit')
         // Use AppKit modal for external connections
         if (!wagmiConnected) {
           // First, try the exposed open method from AppKitModalExposer
@@ -248,20 +330,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     [],
   )
 
+  const contextValue = {
+    isConnected: isConnected || false, 
+    address: address || null, 
+    balance, 
+    isConnecting: isConnecting || wagmiPending, 
+    connectWallet, 
+    disconnectWallet, 
+    updateBalance,
+    isFarcasterWallet,
+    farcasterUser
+  }
+  
+  console.log('[WalletContext] Providing context value', contextValue)
+  
   return (
-    <WalletContext.Provider
-      value={{ 
-        isConnected: isConnected || false, 
-        address: address || null, 
-        balance, 
-        isConnecting: isConnecting || wagmiPending, 
-        connectWallet, 
-        disconnectWallet, 
-        updateBalance,
-        isFarcasterWallet,
-        farcasterUser
-      }}
-    >
+    <WalletContext.Provider value={contextValue}>
       {children}
     </WalletContext.Provider>
   )

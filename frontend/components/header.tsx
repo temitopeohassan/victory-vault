@@ -14,25 +14,52 @@ function isInsideFarcaster(): boolean {
 }
 
 export function Header() {
+  console.log('[Header] Component rendered')
+  
   const { isConnected, isConnecting, connectWallet, address } = useWallet()
+  console.log('[Header] Wallet context state', { isConnected, isConnecting, address })
+  
   const farcaster = useFarcaster()
+  console.log('[Header] Farcaster context state', {
+    isWalletConnected: farcaster.isWalletConnected,
+    walletAddress: farcaster.walletAddress,
+    walletBalance: farcaster.walletBalance
+  })
+  
   const [isInFarcaster, setIsInFarcaster] = useState(false)
 
   // Check if we're inside Farcaster
   useEffect(() => {
-    setIsInFarcaster(isInsideFarcaster())
+    const inFarcaster = isInsideFarcaster()
+    console.log('[Header] Checking if inside Farcaster', { inFarcaster })
+    setIsInFarcaster(inFarcaster)
   }, [])
 
   // Auto-connect when running inside Farcaster
   useEffect(() => {
+    console.log('[Header] Auto-connect effect', { 
+      isWindow: typeof window !== "undefined",
+      hasFarcaster: !!(typeof window !== "undefined" && (window as any).farcaster),
+      isConnected,
+      isConnecting
+    })
+    
     if (typeof window === "undefined") return
     const fc = (window as any).farcaster
-    if (!fc) return
-    if (isConnected || isConnecting) return
+    if (!fc) {
+      console.log('[Header] No Farcaster SDK found')
+      return
+    }
+    if (isConnected || isConnecting) {
+      console.log('[Header] Already connected or connecting, skipping auto-connect')
+      return
+    }
 
+    console.log('[Header] Attempting auto-connect to Farcaster wallet')
     // Defer one frame to avoid layout jitter on first paint
     const id = requestAnimationFrame(() => {
-      void connectWallet().catch(() => {
+      void connectWallet().catch((err) => {
+        console.warn('[Header] Auto-connect failed:', err)
         // swallow errors; user may not have a wallet connected yet
       })
     })
@@ -41,6 +68,7 @@ export function Header() {
 
   // Use Farcaster wallet address as fallback if wallet context hasn't synced yet
   const displayAddress = address || farcaster.walletAddress
+  console.log('[Header] Display address', { displayAddress, source: address ? 'wallet-context' : 'farcaster-context' })
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">

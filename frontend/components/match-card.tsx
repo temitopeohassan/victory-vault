@@ -22,32 +22,70 @@ interface Match {
 }
 
 export function MatchCard({ match }: { match: Match }) {
+  console.log('[MatchCard] Component rendered', { matchId: match.id, match })
+  
   const { address, isConnected } = useAccount()
+  console.log('[MatchCard] useAccount state', { address, isConnected })
+  
   const { stake, isPending, error } = useStake()
+  console.log('[MatchCard] useStake state', { isPending, error })
+  
   const [stakeAmount] = useState("1") // Default stake amount in CELO
   
   // Try to fetch match data from contract to get actual CELO values
   const { match: contractMatch, isLoading: isLoadingContract } = useMatchFromContract(match.id)
+  console.log('[MatchCard] Contract match data', { 
+    contractMatch, 
+    isLoadingContract, 
+    hasContractMatch: !!contractMatch,
+    contractPoolA: contractMatch?.poolA,
+    contractPoolB: contractMatch?.poolB,
+    contractTotalPool: contractMatch?.totalPool
+  })
   
   // Use contract data if available, otherwise fall back to API data
   // Note: API returns USD values, contract returns CELO values
   const displayMatch = contractMatch || match
+  console.log('[MatchCard] Display match (contract or API)', {
+    source: contractMatch ? 'contract' : 'API',
+    displayMatch,
+    poolA: displayMatch.poolA,
+    poolB: displayMatch.poolB,
+    totalPool: displayMatch.totalPool
+  })
   
   const timeUntilStart = Math.max(0, Math.floor((displayMatch.startTime.getTime() - Date.now()) / 1000 / 60))
   const poolAPercent = displayMatch.totalPool > 0 ? (displayMatch.poolA / displayMatch.totalPool) * 100 : 50
   const poolBPercent = displayMatch.totalPool > 0 ? (displayMatch.poolB / displayMatch.totalPool) * 100 : 50
+  console.log('[MatchCard] Calculated values', { timeUntilStart, poolAPercent, poolBPercent })
 
   const handleStake = async (outcome: 1 | 2) => {
-    if (!isConnected) return
+    console.log('[MatchCard] handleStake called', { outcome, isConnected, matchId: match.id, stakeAmount })
+    if (!isConnected) {
+      console.warn('[MatchCard] Cannot stake: wallet not connected')
+      return
+    }
     try {
+      console.log('[MatchCard] Calling stake function', { matchId: match.id, outcome, stakeAmount })
       // Outcome: 1 = TeamA, 2 = TeamB
       // Ensure amount is a valid string for parseEther
       await stake(match.id, outcome, stakeAmount)
+      console.log('[MatchCard] Stake function completed successfully')
     } catch (err) {
       // Error is handled by the hook and displayed via the error prop
-      console.error("Staking error:", err)
+      console.error("[MatchCard] Staking error:", err)
     }
   }
+  
+  // Log button state
+  useEffect(() => {
+    console.log('[MatchCard] Button state check', {
+      isConnected,
+      isPending,
+      matchStatus: displayMatch.status,
+      canStake: isConnected && !isPending && displayMatch.status === 'active'
+    })
+  }, [isConnected, isPending, displayMatch.status])
 
   return (
     <Card className="hover:shadow-lg transition-shadow relative">
@@ -135,10 +173,20 @@ export function MatchCard({ match }: { match: Match }) {
               size="sm"
               type="button"
               onClick={(e) => {
+                console.log('[MatchCard] Button TeamA clicked', { 
+                  event: e, 
+                  isPending, 
+                  isConnected, 
+                  status: displayMatch.status,
+                  disabled: !isConnected || isPending || displayMatch.status !== 'active'
+                })
                 e.preventDefault()
                 e.stopPropagation()
                 if (!isPending && isConnected && displayMatch.status === 'active') {
+                  console.log('[MatchCard] Calling handleStake(1)')
                   handleStake(1)
+                } else {
+                  console.warn('[MatchCard] Cannot stake TeamA', { isPending, isConnected, status: displayMatch.status })
                 }
               }}
               disabled={!isConnected || isPending || displayMatch.status !== 'active'}
@@ -152,10 +200,20 @@ export function MatchCard({ match }: { match: Match }) {
               size="sm"
               type="button"
               onClick={(e) => {
+                console.log('[MatchCard] Button TeamB clicked', { 
+                  event: e, 
+                  isPending, 
+                  isConnected, 
+                  status: displayMatch.status,
+                  disabled: !isConnected || isPending || displayMatch.status !== 'active'
+                })
                 e.preventDefault()
                 e.stopPropagation()
                 if (!isPending && isConnected && displayMatch.status === 'active') {
+                  console.log('[MatchCard] Calling handleStake(2)')
                   handleStake(2)
+                } else {
+                  console.warn('[MatchCard] Cannot stake TeamB', { isPending, isConnected, status: displayMatch.status })
                 }
               }}
               disabled={!isConnected || isPending || displayMatch.status !== 'active'}
