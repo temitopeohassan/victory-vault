@@ -14,6 +14,7 @@ if (!contractAddress) {
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'default'
 
 // Create wagmi adapter with Reown AppKit
+// The adapter will create its own wagmi config with all the necessary connectors
 const wagmiAdapter = new WagmiAdapter({
   storage: createStorage({
     storage: cookieStorage,
@@ -23,20 +24,39 @@ const wagmiAdapter = new WagmiAdapter({
   networks: [celo],
 })
 
-// Create wagmi config with Farcaster connector
-// The AppKit adapter will provide its connectors through the modal
-// We use the adapter's config as reference but create our own to include Farcaster
-export const wagmiConfig = createConfig({
-  chains: [celo],
-  transports: {
-    [celo.id]: http(process.env.NEXT_PUBLIC_CELO_RPC_URL || 'https://forno.celo.org'),
-  },
-  connectors: [
-    farcasterMiniApp(), // Farcaster connector (used when inside Farcaster)
-    // AppKit connectors are provided by the adapter and available through the modal
-  ],
-  ssr: true,
-})
+// Get the wagmi config from the adapter (includes all AppKit connectors)
+// The adapter's config includes: MetaMask, WalletConnect, Coinbase Wallet, etc.
+// The adapter exposes its config via the wagmiConfig property
+const adapterConfig = (wagmiAdapter as any).wagmiConfig
+
+// Debug: Log adapter config availability
+if (typeof window !== 'undefined') {
+  console.log('WagmiAdapter config available:', !!adapterConfig)
+  if (adapterConfig) {
+    console.log('Adapter connectors count:', adapterConfig.connectors?.length || 0)
+  }
+}
+
+// Create wagmi config that combines adapter connectors with Farcaster connector
+// This ensures we have both AppKit connectors (for browser wallets) and Farcaster connector
+export const wagmiConfig = adapterConfig
+  ? createConfig({
+      ...adapterConfig,
+      connectors: [
+        ...adapterConfig.connectors, // All AppKit connectors (MetaMask, WalletConnect, etc.)
+        farcasterMiniApp(), // Farcaster connector (used when inside Farcaster)
+      ],
+    })
+  : createConfig({
+      chains: [celo],
+      transports: {
+        [celo.id]: http(process.env.NEXT_PUBLIC_CELO_RPC_URL || 'https://forno.celo.org'),
+      },
+      connectors: [
+        farcasterMiniApp(), // Farcaster connector (used when inside Farcaster)
+      ],
+      ssr: true,
+    })
 
 // Note: The AppKit adapter manages its own connectors through the modal UI.
 // The Farcaster connector is available directly in the config for use inside Farcaster.

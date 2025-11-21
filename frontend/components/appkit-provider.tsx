@@ -156,10 +156,11 @@ export function AppKitProvider({ children }: { children: React.ReactNode }) {
       name: 'Victory  Vault',
       description: 'Soccer Prediction Market',
       url: window.location.origin,
-      icons: [],
+      icons: [window.location.origin + '/favicon.ico'],
     }
 
     try {
+      console.log('Initializing Reown AppKit with project ID:', projectId)
       const instance = createAppKit({
         adapters: [wagmiAdapter],
         projectId,
@@ -168,6 +169,14 @@ export function AppKitProvider({ children }: { children: React.ReactNode }) {
         features: {
           // Disable analytics if using default project ID to reduce errors
           analytics: projectId !== 'default',
+          // Enable wallet features
+          email: false,
+          socials: [],
+          emailShowWallets: true,
+        },
+        themeMode: 'light',
+        themeVariables: {
+          '--w3m-z-index': '9999',
         },
       })
 
@@ -176,8 +185,11 @@ export function AppKitProvider({ children }: { children: React.ReactNode }) {
       ;(window as any).__REOWN_APPKIT_INSTANCE__ = instance
       appKitInitialized = true
       setIsAppKitReady(true)
+      console.log('Reown AppKit initialized successfully')
     } catch (error) {
-      console.warn('Failed to initialize AppKit:', error)
+      console.error('Failed to initialize AppKit:', error)
+      // Still set ready to true to avoid blocking the app
+      setIsAppKitReady(true)
     }
   }, [])
 

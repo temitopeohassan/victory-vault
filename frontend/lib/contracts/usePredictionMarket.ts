@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useReadContract, useSendTransaction, useWaitForTransactionReceipt, useAccount, useChainId } from 'wagmi'
+import { useReadContract, useSendTransaction, useWaitForTransactionReceipt, useAccount, useChainId, useSwitchChain } from 'wagmi'
 import { CONTRACT_ADDRESS, DIVVI_CONSUMER } from './config'
 import { formatEther, parseEther, encodeFunctionData } from 'viem'
+import { celo } from 'wagmi/chains'
 import { getReferralTag, submitReferral } from '@divvi/referral-sdk'
 
 // VictoryVault ABI - matches the deployed contract
@@ -69,8 +70,9 @@ export function useMatchData(matchId: `0x${string}` | string) {
 }
 
 export function useStake() {
-  const { address } = useAccount()
+  const { address, chainId: currentChainId } = useAccount()
   const chainId = useChainId()
+  const { switchChain } = useSwitchChain()
   const { sendTransaction, data: hash, isPending, error } = useSendTransaction()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
@@ -90,6 +92,28 @@ export function useStake() {
   const stake = async (matchId: string, outcome: 1 | 2, amountInCELO: string) => {
     if (!address) {
       throw new Error('Wallet not connected')
+    }
+
+    // Ensure we're on Celo chain before sending transaction
+    const activeChainId = currentChainId || chainId
+    if (activeChainId !== celo.id) {
+      try {
+        console.log(`Switching from chain ${activeChainId} to Celo (${celo.id})`)
+        await switchChain({ chainId: celo.id })
+        // Wait a bit for chain switch to complete
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        // Verify chain switch was successful
+        const newChainId = currentChainId || chainId
+        if (newChainId !== celo.id) {
+          throw new Error('Failed to switch to Celo network. Please switch manually.')
+        }
+      } catch (err: any) {
+        console.error('Chain switch error:', err)
+        if (err?.message?.includes('User rejected')) {
+          throw new Error('Please approve the network switch to Celo to continue')
+        }
+        throw new Error('Please switch to Celo network to stake. The transaction requires CELO, not ETH.')
+      }
     }
 
     // VictoryVault uses native CELO (18 decimals)
@@ -118,6 +142,7 @@ export function useStake() {
     const dataWithReferral = (functionData + referralTag.slice(2)) as `0x${string}`
 
     // Step 4: Send transaction with referral tag in calldata
+    // Chain is already switched to Celo above, so transaction will be on Celo
     sendTransaction({
       to: CONTRACT_ADDRESS,
       data: dataWithReferral,
