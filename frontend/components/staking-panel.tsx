@@ -25,63 +25,79 @@ interface StakingPanelProps {
   onSelectTeam: (team: "A" | "B" | null) => void
 }
 
-// Helper to check if we're inside Farcaster
+// Detect Farcaster environment
 function isInsideFarcaster(): boolean {
-  if (typeof window === 'undefined') return false
+  if (typeof window === "undefined") return false
   return !!(window as any).farcaster
 }
 
 export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanelProps) {
   const [stakeAmount, setStakeAmount] = useState("")
   const [isInFarcaster, setIsInFarcaster] = useState(false)
-  
-  // Use custom wallet context
+
   const wallet = useWallet()
   const farcaster = useFarcaster()
+
+  /** -------------------------------
+   *  FIXED: Correct address + balance logic
+   * --------------------------------*/
   
-  // Determine which context to use based on environment
-  const address = wallet.address || farcaster.walletAddress
-  const isConnected = wallet.isConnected || farcaster.isWalletConnected
-  const userBalance = wallet.balance !== undefined && wallet.balance !== null 
-    ? wallet.balance 
-    : (farcaster.walletBalance ? parseFloat(farcaster.walletBalance) : 0)
-  
+  const address =
+    wallet.address ||
+    (farcaster.walletAddress ? String(farcaster.walletAddress) : null)
+
+  const isConnected =
+    wallet.isConnected || farcaster.isWalletConnected
+
+  const userBalance = (() => {
+    if (wallet.balance !== undefined && wallet.balance !== null) {
+      return Number(wallet.balance)
+    }
+    if (farcaster.walletBalance !== null && farcaster.walletBalance !== undefined) {
+      return Number(farcaster.walletBalance)
+    }
+    return 0
+  })()
+
   const { stake, isPending, isSuccess, error } = useStake()
 
-  // Check if we're inside Farcaster
+  /** Detect Farcaster presence */
   useEffect(() => {
-    const inFarcaster = isInsideFarcaster()
-    setIsInFarcaster(inFarcaster)
-    console.log('[StakingPanel] Environment check:', { 
-      inFarcaster,
-      isConnected,
-      address,
-      userBalance,
-      walletConnected: wallet.isConnected,
-      farcasterConnected: farcaster.isWalletConnected,
-    })
-  }, [isConnected, address, userBalance, wallet.isConnected, farcaster.isWalletConnected])
+    const inside = isInsideFarcaster()
+    setIsInFarcaster(inside)
+  }, [])
 
-  // Auto-connect Farcaster wallet when inside Farcaster
+  /** AUTO CONNECT FARCASTER WALLET */
   useEffect(() => {
     if (isInFarcaster && !farcaster.isWalletConnected && farcaster.sdk) {
-      console.log('[StakingPanel] Auto-connecting Farcaster wallet')
-      farcaster.connectWallet().catch((err) => {
-        console.warn('[StakingPanel] Failed to auto-connect Farcaster wallet:', err)
-      })
+      farcaster.connectWallet().catch((err) =>
+        console.warn("[StakingPanel] Auto-connect failed:", err)
+      )
     }
-  }, [isInFarcaster, farcaster])
+  }, [isInFarcaster, farcaster.isWalletConnected, farcaster.sdk])
 
-  const selectedTeamName = selectedTeam === "A" ? match.teamA : selectedTeam === "B" ? match.teamB : null
-  const selectedOdds = selectedTeam === "A" ? match.odds.teamA : selectedTeam === "B" ? match.odds.teamB : 0
-  const potentialWinnings = stakeAmount ? (Number.parseFloat(stakeAmount) * selectedOdds).toFixed(2) : "0.00"
+  const selectedTeamName =
+    selectedTeam === "A"
+      ? match.teamA
+      : selectedTeam === "B"
+        ? match.teamB
+        : null
 
-  // Check if user has enough balance
-  const hasEnoughBalance = userBalance !== undefined && userBalance !== null 
-    ? Number(userBalance) >= Number(stakeAmount || 0)
-    : true
+  const selectedOdds =
+    selectedTeam === "A"
+      ? match.odds.teamA
+      : selectedTeam === "B"
+        ? match.odds.teamB
+        : 0
 
-  // Reset form on successful stake
+  const potentialWinnings = stakeAmount
+    ? (Number(stakeAmount) * selectedOdds).toFixed(2)
+    : "0.00"
+
+  const hasEnoughBalance =
+    userBalance >= Number(stakeAmount || 0)
+
+  /** Reset form on success */
   useEffect(() => {
     if (isSuccess) {
       setStakeAmount("")
@@ -89,43 +105,26 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
     }
   }, [isSuccess, onSelectTeam])
 
+  /** ------------------------------
+   *  FIXED: stake() uses number value
+   * --------------------------------*/
   const handleStake = async () => {
-    if (!selectedTeam || !stakeAmount || !isConnected || !address) {
-      console.error('[StakingPanel] Missing required data', { 
-        selectedTeam, 
-        stakeAmount, 
-        isConnected, 
-        address 
-      })
-      return
-    }
-    
-    if (!hasEnoughBalance) {
-      console.error('[StakingPanel] Insufficient balance')
-      return
-    }
-    
-    console.log('[StakingPanel] Placing stake', {
-      matchId: match.id,
-      selectedTeam,
-      stakeAmount,
-      address,
-      isInFarcaster,
-      network: 'Celo'
-    })
-    
+    if (!selectedTeam || !stakeAmount || !isConnected || !address) return
+    if (!hasEnoughBalance) return
+
     const outcome = selectedTeam === "A" ? 1 : 2
-    await stake(match.id, outcome, stakeAmount)
+
+    await stake(match.id, outcome, Number(stakeAmount))
   }
 
-  // Determine if button should be disabled
-  const isButtonDisabled = 
-    !stakeAmount || 
+  /** Button disable logic */
+  const isButtonDisabled =
+    !stakeAmount ||
     Number(stakeAmount) < 0.1 ||
-    isPending || 
-    !isConnected || 
+    !isConnected ||
     !address ||
-    match.status !== 'active' ||
+    isPending ||
+    match.status !== "active" ||
     !hasEnoughBalance
 
   return (
@@ -133,108 +132,121 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
       <CardHeader>
         <CardTitle>Place Your Stake</CardTitle>
       </CardHeader>
+
       <CardContent className="space-y-6">
-        {/* Connection Status for Farcaster */}
+
+        {/* Farcaster connecting UI */}
         {isInFarcaster && !isConnected && (
           <div className="flex gap-2 bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
-            <AlertCircle className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 text-blue-500" />
             <div className="text-xs text-blue-500">
-              <p className="font-semibold mb-1">Connecting to Farcaster wallet...</p>
-              <p>Please approve the wallet connection in Farcaster.</p>
+              <p className="font-semibold">Connecting to Farcaster wallet…</p>
+              <p>Approve connection inside Farcaster</p>
             </div>
           </div>
         )}
 
-        {/* Connection Status */}
+        {/* Browser wallet connect UI */}
         {!isInFarcaster && !isConnected && (
           <div className="flex gap-2 bg-muted p-3 rounded-lg">
-            <AlertCircle className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-muted-foreground">
-              Connect your wallet to place stakes
-            </p>
+            <AlertCircle className="w-4 h-4 text-muted-foreground" />
+            <p className="text-xs">Connect your wallet to place stakes</p>
           </div>
         )}
 
-        {/* Balance Display */}
-        {isConnected && userBalance !== undefined && (
-          <div className="flex justify-between items-center text-sm">
+        {/* Balance */}
+        {isConnected && (
+          <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Your Balance:</span>
-            <span className="font-semibold text-foreground">
-              {Number(userBalance).toFixed(4)} CELO
+            <span className="font-semibold">
+              {userBalance.toFixed(4)} CELO
             </span>
           </div>
         )}
 
         {/* Team Selection */}
         <div className="space-y-3">
-          <p className="text-sm font-medium text-foreground">Select Team</p>
+          <p className="text-sm font-medium">Select Team</p>
+
           <div className="grid grid-cols-2 gap-2">
             <Button
               variant={selectedTeam === "A" ? "default" : "outline"}
-              onClick={() => onSelectTeam(selectedTeam === "A" ? null : "A")}
-              className={selectedTeam === "A" ? "bg-primary text-primary-foreground" : ""}
               disabled={!isConnected}
+              onClick={() =>
+                onSelectTeam(selectedTeam === "A" ? null : "A")
+              }
             >
               {match.teamA.split(" ")[0]}
             </Button>
+
             <Button
               variant={selectedTeam === "B" ? "default" : "outline"}
-              onClick={() => onSelectTeam(selectedTeam === "B" ? null : "B")}
-              className={selectedTeam === "B" ? "bg-secondary text-secondary-foreground" : ""}
               disabled={!isConnected}
+              onClick={() =>
+                onSelectTeam(selectedTeam === "B" ? null : "B")
+              }
             >
               {match.teamB.split(" ")[0]}
             </Button>
           </div>
         </div>
 
+        {/* When team selected */}
         {selectedTeam && (
           <>
-            {/* Selected Team Info */}
+            {/* Selected Info */}
             <div className="bg-muted p-4 rounded-lg">
-              <p className="text-sm text-muted-foreground mb-1">Selected Team</p>
-              <p className="text-lg font-semibold text-foreground">{selectedTeamName}</p>
-              <div className="flex items-center justify-between mt-2">
+              <p className="text-sm text-muted-foreground">Selected Team</p>
+              <p className="text-lg font-semibold">{selectedTeamName}</p>
+
+              <div className="flex justify-between mt-2">
                 <span className="text-sm text-muted-foreground">Odds</span>
-                <Badge variant="outline" className="bg-accent/10 text-accent border-accent">
+                <Badge variant="outline">
                   {selectedOdds.toFixed(2)}x
                 </Badge>
               </div>
             </div>
 
-            {/* Stake Amount Input */}
+            {/* Stake Amount */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Stake Amount (CELO)</label>
+              <label className="text-sm font-medium">
+                Stake Amount (CELO)
+              </label>
+
               <Input
                 type="number"
-                placeholder="Enter amount"
                 value={stakeAmount}
-                onChange={(e) => setStakeAmount(e.target.value)}
-                className="bg-input border-border text-foreground placeholder:text-muted-foreground"
                 min="0.1"
                 step="0.1"
+                onChange={(e) => setStakeAmount(e.target.value)}
                 disabled={!isConnected}
+                placeholder="Enter amount"
               />
+
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Min: 0.1 CELO</span>
-                {userBalance !== undefined && (
-                  <button 
-                    onClick={() => setStakeAmount(Math.max(0.1, Number(userBalance) * 0.9).toFixed(4))}
-                    className="text-accent hover:underline"
-                    type="button"
-                  >
-                    Max
-                  </button>
-                )}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setStakeAmount(
+                      Math.max(0.1, userBalance * 0.9).toFixed(4)
+                    )
+                  }
+                  className="text-accent hover:underline"
+                >
+                  Max
+                </button>
               </div>
             </div>
 
-            {/* Insufficient Balance Warning */}
+            {/* Insufficient balance */}
             {!hasEnoughBalance && stakeAmount && (
               <div className="flex gap-2 bg-destructive/10 border border-destructive/20 p-3 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                <AlertCircle className="w-4 h-4 text-destructive" />
                 <p className="text-xs text-destructive">
-                  Insufficient balance. You have {Number(userBalance).toFixed(4)} CELO
+                  Insufficient balance: You have{" "}
+                  {userBalance.toFixed(4)} CELO
                 </p>
               </div>
             )}
@@ -243,111 +255,94 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
             <div className="bg-accent/5 border border-accent/20 p-4 rounded-lg">
               <div className="flex justify-between mb-2">
                 <span className="text-sm text-muted-foreground">Stake</span>
-                <span className="font-semibold text-foreground">{stakeAmount || "0.00"} CELO</span>
+                <span className="font-semibold">
+                  {stakeAmount || "0.00"} CELO
+                </span>
               </div>
+
               <div className="flex justify-between mb-3">
-                <span className="text-sm text-muted-foreground">Potential Return</span>
-                <span className="font-bold text-accent">{potentialWinnings} CELO</span>
+                <span className="text-sm text-muted-foreground">
+                  Potential Return
+                </span>
+                <span className="font-bold text-accent">
+                  {potentialWinnings} CELO
+                </span>
               </div>
-              <div className="border-t border-accent/20 pt-3 flex justify-between">
-                <span className="text-sm font-medium text-foreground">Net Profit</span>
+
+              <div className="border-t pt-3 flex justify-between">
+                <span className="text-sm font-medium">Net Profit</span>
                 <span className="font-bold text-accent">
                   {stakeAmount
-                    ? (Number.parseFloat(potentialWinnings) - Number.parseFloat(stakeAmount)).toFixed(2)
+                    ? (
+                        Number(potentialWinnings) -
+                        Number(stakeAmount)
+                      ).toFixed(2)
                     : "0.00"} CELO
                 </span>
               </div>
             </div>
 
-            {/* Error Message */}
+            {/* Error */}
             {error && (
               <div className="flex gap-2 bg-destructive/10 border border-destructive/20 p-3 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                <AlertCircle className="w-4 h-4 text-destructive" />
                 <p className="text-xs text-destructive">
-                  {error.message || "Transaction failed. Please try again."}
+                  {error.message || "Transaction failed"}
                 </p>
               </div>
             )}
 
-            {/* Success Message */}
+            {/* Success */}
             {isSuccess && (
               <div className="flex gap-2 bg-accent/10 border border-accent/20 p-3 rounded-lg">
-                <CheckCircle2 className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-accent">Stake placed successfully!</p>
+                <CheckCircle2 className="w-4 h-4 text-accent" />
+                <p className="text-xs text-accent">
+                  Stake placed successfully!
+                </p>
               </div>
             )}
 
-            {/* Warning */}
+            {/* Risk Warning */}
             <div className="flex gap-2 bg-destructive/10 border border-destructive/20 p-3 rounded-lg">
-              <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-destructive">Staking involves risk. Only stake what you can afford to lose.</p>
+              <AlertCircle className="w-4 h-4 text-destructive" />
+              <p className="text-xs text-destructive">
+                Staking involves risk.
+              </p>
             </div>
 
             {/* Stake Button */}
             <Button
               onClick={handleStake}
               disabled={isButtonDisabled}
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50"
+              className="w-full"
               size="lg"
             >
-              {!isConnected 
-                ? isInFarcaster ? "Connecting..." : "Connect Wallet" 
+              {isPending
+                ? "Processing..."
+                : isSuccess
+                ? "Stake Placed!"
+                : !isConnected
+                ? isInFarcaster
+                  ? "Connecting..."
+                  : "Connect Wallet"
                 : !address
-                  ? "No Address Found"
-                  : isPending 
-                    ? "Processing..." 
-                    : isSuccess 
-                      ? "Stake Placed!" 
-                      : !hasEnoughBalance && stakeAmount
-                        ? "Insufficient Balance"
-                        : Number(stakeAmount) < 0.1
-                          ? "Min 0.1 CELO"
-                          : match.status !== 'active'
-                            ? "Match Not Active"
-                            : "Confirm Stake"}
+                ? "No Address"
+                : !hasEnoughBalance
+                ? "Insufficient Balance"
+                : Number(stakeAmount) < 0.1
+                ? "Min 0.1 CELO"
+                : match.status !== "active"
+                ? "Match Not Active"
+                : "Confirm Stake"}
             </Button>
-            
-            {/* Additional status info */}
-            {isButtonDisabled && (
-              <p className="text-xs text-center text-muted-foreground">
-                {!isConnected 
-                  ? isInFarcaster 
-                    ? "Waiting for Farcaster wallet connection..." 
-                    : "Please connect your wallet first"
-                  : !address
-                    ? "Wallet address not detected"
-                    : !stakeAmount
-                      ? "Enter stake amount"
-                      : Number(stakeAmount) < 0.1
-                        ? "Minimum stake is 0.1 CELO"
-                        : !hasEnoughBalance
-                          ? `Need ${Number(stakeAmount).toFixed(4)} CELO, have ${Number(userBalance).toFixed(4)} CELO`
-                          : match.status !== 'active'
-                            ? "This match is not accepting stakes"
-                            : ""}
-              </p>
-            )}
-
-            {/* Debug Info (development only) */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="text-xs text-muted-foreground space-y-1 p-2 bg-muted rounded">
-                <div className="font-bold">Debug Info:</div>
-                <div>Environment: {isInFarcaster ? 'Farcaster' : 'Browser'}</div>
-                <div>Connected: {isConnected ? 'Yes' : 'No'}</div>
-                <div>Wallet Connected: {wallet.isConnected ? 'Yes' : 'No'}</div>
-                <div>Farcaster Connected: {farcaster.isWalletConnected ? 'Yes' : 'No'}</div>
-                <div>Address: {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'None'}</div>
-                <div>Balance: {userBalance !== undefined ? Number(userBalance).toFixed(4) : 'Loading...'} CELO</div>
-                <div>Match Status: {match.status}</div>
-                <div>Button Disabled: {isButtonDisabled ? 'Yes' : 'No'}</div>
-              </div>
-            )}
           </>
         )}
 
         {!selectedTeam && (
           <div className="text-center py-8">
-            <p className="text-muted-foreground">Select a team to place your stake</p>
+            <p className="text-muted-foreground">
+              Select a team to place your stake
+            </p>
           </div>
         )}
       </CardContent>
