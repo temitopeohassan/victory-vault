@@ -25,19 +25,52 @@ interface StakingPanelProps {
   onSelectTeam: (team: "A" | "B" | null) => void
 }
 
+// Helper to check if we're inside Farcaster
+function isInsideFarcaster(): boolean {
+  if (typeof window === 'undefined') return false
+  return !!(window as any).farcaster
+}
+
 export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanelProps) {
   const [stakeAmount, setStakeAmount] = useState("")
+  const [isInFarcaster, setIsInFarcaster] = useState(false)
   
-  // Use custom wallet context instead of wagmi
-  const { address: walletAddress, isConnected: walletConnected, balance } = useWallet()
+  // Use custom wallet context
+  const wallet = useWallet()
   const farcaster = useFarcaster()
   
-  // Use Farcaster wallet as fallback
-  const address = walletAddress || farcaster.walletAddress
-  const isConnected = walletConnected || farcaster.isWalletConnected
-  const userBalance = balance !== undefined ? balance : farcaster.walletBalance
+  // Determine which context to use based on environment
+  const address = wallet.address || farcaster.walletAddress
+  const isConnected = wallet.isConnected || farcaster.isWalletConnected
+  const userBalance = wallet.balance !== undefined && wallet.balance !== null 
+    ? wallet.balance 
+    : (farcaster.walletBalance ? parseFloat(farcaster.walletBalance) : 0)
   
   const { stake, isPending, isSuccess, error } = useStake()
+
+  // Check if we're inside Farcaster
+  useEffect(() => {
+    const inFarcaster = isInsideFarcaster()
+    setIsInFarcaster(inFarcaster)
+    console.log('[StakingPanel] Environment check:', { 
+      inFarcaster,
+      isConnected,
+      address,
+      userBalance,
+      walletConnected: wallet.isConnected,
+      farcasterConnected: farcaster.isWalletConnected,
+    })
+  }, [isConnected, address, userBalance, wallet.isConnected, farcaster.isWalletConnected])
+
+  // Auto-connect Farcaster wallet when inside Farcaster
+  useEffect(() => {
+    if (isInFarcaster && !farcaster.isWalletConnected && farcaster.sdk) {
+      console.log('[StakingPanel] Auto-connecting Farcaster wallet')
+      farcaster.connectWallet().catch((err) => {
+        console.warn('[StakingPanel] Failed to auto-connect Farcaster wallet:', err)
+      })
+    }
+  }, [isInFarcaster, farcaster])
 
   const selectedTeamName = selectedTeam === "A" ? match.teamA : selectedTeam === "B" ? match.teamB : null
   const selectedOdds = selectedTeam === "A" ? match.odds.teamA : selectedTeam === "B" ? match.odds.teamB : 0
@@ -46,7 +79,7 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
   // Check if user has enough balance
   const hasEnoughBalance = userBalance !== undefined && userBalance !== null 
     ? Number(userBalance) >= Number(stakeAmount || 0)
-    : true // Default to true if balance not loaded yet
+    : true
 
   // Reset form on successful stake
   useEffect(() => {
@@ -77,10 +110,11 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
       selectedTeam,
       stakeAmount,
       address,
+      isInFarcaster,
       network: 'Celo'
     })
     
-    const outcome = selectedTeam === "A" ? 1 : 2 // 1 = TeamA, 2 = TeamB
+    const outcome = selectedTeam === "A" ? 1 : 2
     await stake(match.id, outcome, stakeAmount)
   }
 
@@ -100,8 +134,19 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
         <CardTitle>Place Your Stake</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Connection Status for Farcaster */}
+        {isInFarcaster && !isConnected && (
+          <div className="flex gap-2 bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+            <div className="text-xs text-blue-500">
+              <p className="font-semibold mb-1">Connecting to Farcaster wallet...</p>
+              <p>Please approve the wallet connection in Farcaster.</p>
+            </div>
+          </div>
+        )}
+
         {/* Connection Status */}
-        {!isConnected && (
+        {!isInFarcaster && !isConnected && (
           <div className="flex gap-2 bg-muted p-3 rounded-lg">
             <AlertCircle className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground">
@@ -246,7 +291,7 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
               size="lg"
             >
               {!isConnected 
-                ? "Connect Wallet" 
+                ? isInFarcaster ? "Connecting..." : "Connect Wallet" 
                 : !address
                   ? "No Address Found"
                   : isPending 
@@ -266,7 +311,9 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
             {isButtonDisabled && (
               <p className="text-xs text-center text-muted-foreground">
                 {!isConnected 
-                  ? "Please connect your wallet first" 
+                  ? isInFarcaster 
+                    ? "Waiting for Farcaster wallet connection..." 
+                    : "Please connect your wallet first"
                   : !address
                     ? "Wallet address not detected"
                     : !stakeAmount
@@ -280,11 +327,15 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
                             : ""}
               </p>
             )}
-            
-            {/* Debug Info (remove in production) */}
+
+            {/* Debug Info (development only) */}
             {process.env.NODE_ENV === 'development' && (
               <div className="text-xs text-muted-foreground space-y-1 p-2 bg-muted rounded">
+                <div className="font-bold">Debug Info:</div>
+                <div>Environment: {isInFarcaster ? 'Farcaster' : 'Browser'}</div>
                 <div>Connected: {isConnected ? 'Yes' : 'No'}</div>
+                <div>Wallet Connected: {wallet.isConnected ? 'Yes' : 'No'}</div>
+                <div>Farcaster Connected: {farcaster.isWalletConnected ? 'Yes' : 'No'}</div>
                 <div>Address: {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'None'}</div>
                 <div>Balance: {userBalance !== undefined ? Number(userBalance).toFixed(4) : 'Loading...'} CELO</div>
                 <div>Match Status: {match.status}</div>
