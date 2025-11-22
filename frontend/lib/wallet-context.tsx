@@ -4,7 +4,7 @@ import type React from "react"
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react"
 import { useFarcaster } from './farcaster-context'
 import { useAccount, useConnect, useDisconnect, useBalance } from 'wagmi'
-// Don't import useAppKit directly - we'll use dynamic import to avoid SSR issues
+import { celo } from 'wagmi/chains'
 
 interface WalletContextType {
   isConnected: boolean
@@ -50,7 +50,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     wagmiAddress,
     wagmiConnected,
     connector: connector?.name,
-    chainId
+    chainId,
+    isOnCelo: chainId === celo.id
   })
   
   const { connect, connectors, isPending: wagmiPending } = useConnect()
@@ -62,11 +63,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   
   const { disconnect } = useDisconnect()
   
-  // Fetch native CELO balance (not token balance)
-  // Explicitly fetch native token balance by not providing token address
+  // Fetch native CELO balance - FORCE Celo chain
   const { data: wagmiBalance, refetch: refetchBalance, isLoading: isLoadingBalance, error: balanceError } = useBalance({ 
     address: wagmiAddress,
-    // No token address means native token (CELO on Celo network)
+    chainId: celo.id, // CRITICAL: Force Celo chain for balance
     query: {
       enabled: !!wagmiAddress && wagmiConnected,
       refetchInterval: 10000, // Refetch every 10 seconds
@@ -76,13 +76,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   console.log('[WalletContext] useBalance state', {
     wagmiBalance,
     isLoadingBalance,
-    balanceError,
+    balanceError: balanceError?.message,
     enabled: !!wagmiAddress && wagmiConnected,
     hasBalance: !!wagmiBalance,
     balanceFormatted: wagmiBalance?.formatted,
     balanceValue: wagmiBalance?.value?.toString(),
     balanceSymbol: wagmiBalance?.symbol,
-    balanceDecimals: wagmiBalance?.decimals
+    balanceDecimals: wagmiBalance?.decimals,
+    chainId: celo.id,
+    isOnCelo: chainId === celo.id
   })
   
   // Determine if we're inside Farcaster
@@ -153,7 +155,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   // Get balance from appropriate source
   const balance = useMemo(() => {
-    console.log('[WalletContext] Computing balance', { isInFarcaster })
+    console.log('[WalletContext] Computing balance', { 
+      isInFarcaster,
+      farcasterBalance: farcaster.walletBalance,
+      wagmiBalance: wagmiBalance?.formatted,
+      chainId
+    })
     
     if (isInFarcaster) {
       const bal = farcaster.walletBalance ? parseFloat(farcaster.walletBalance) : 0
@@ -163,6 +170,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       })
       return bal
     } else {
+      // Only use wagmi balance if we're on Celo chain
+      if (chainId !== celo.id) {
+        console.warn('[WalletContext] Not on Celo chain, balance may be incorrect', {
+          currentChain: chainId,
+          celoChainId: celo.id
+        })
+      }
+      
       const bal = wagmiBalance ? parseFloat(wagmiBalance.formatted) : 0
       console.log('[WalletContext] Wagmi balance computed', {
         wagmiBalance,
@@ -170,11 +185,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         parsedBalance: bal,
         value: wagmiBalance?.value?.toString(),
         decimals: wagmiBalance?.decimals,
-        symbol: wagmiBalance?.symbol
+        symbol: wagmiBalance?.symbol,
+        chainId
       })
       return bal
     }
-  }, [isInFarcaster, farcaster.walletBalance, wagmiBalance])
+  }, [isInFarcaster, farcaster.walletBalance, wagmiBalance, chainId])
   
   console.log('[WalletContext] Final balance value', { balance })
 
@@ -188,7 +204,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       wagmiConnected,
       wagmiAddress,
       hasRefetch: !!refetchBalance,
-      address
+      address,
+      chainId
     })
     
     if (isInFarcaster && isConnected && farcaster.isWalletConnected && farcaster.requestWalletBalance) {
@@ -210,7 +227,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     } else {
       console.log('[WalletContext] Balance refresh skipped - conditions not met')
     }
-  }, [isInFarcaster, isConnected, farcaster.isWalletConnected, address, wagmiConnected, wagmiAddress, refetchBalance, farcaster])
+  }, [isInFarcaster, isConnected, farcaster.isWalletConnected, address, wagmiConnected, wagmiAddress, refetchBalance, farcaster, chainId])
 
   // Sync with Farcaster wallet when available
   useEffect(() => {
@@ -324,10 +341,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const updateBalance = useCallback(
     (amount: number) => {
-      // Balance is managed by wagmi or Farcaster, so this is mainly for UI updates
-      // You might want to refetch balance after transactions
+      // Trigger a balance refetch
+      if (!isInFarcaster && refetchBalance) {
+        refetchBalance()
+      } else if (isInFarcaster && farcaster.requestWalletBalance) {
+        farcaster.requestWalletBalance()
+      }
     },
-    [],
+    [isInFarcaster, refetchBalance, farcaster],
   )
 
   const contextValue = {
