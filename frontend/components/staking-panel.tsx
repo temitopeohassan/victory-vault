@@ -247,14 +247,39 @@ export function StakingPanel({ match, selectedTeam, onSelectTeam }: StakingPanel
             >
               {!isConnected 
                 ? "Connect Wallet" 
-                : isPending 
-                  ? "Processing..." 
-                  : isSuccess 
-                    ? "Stake Placed!" 
-                    : !hasEnoughBalance && stakeAmount
-                      ? "Insufficient Balance"
-                      : "Confirm Stake"}
+                : !address
+                  ? "No Address Found"
+                  : isPending 
+                    ? "Processing..." 
+                    : isSuccess 
+                      ? "Stake Placed!" 
+                      : !hasEnoughBalance && stakeAmount
+                        ? "Insufficient Balance"
+                        : Number(stakeAmount) < 0.1
+                          ? "Min 0.1 CELO"
+                          : match.status !== 'active'
+                            ? "Match Not Active"
+                            : "Confirm Stake"}
             </Button>
+            
+            {/* Additional status info */}
+            {isButtonDisabled && (
+              <p className="text-xs text-center text-muted-foreground">
+                {!isConnected 
+                  ? "Please connect your wallet first" 
+                  : !address
+                    ? "Wallet address not detected"
+                    : !stakeAmount
+                      ? "Enter stake amount"
+                      : Number(stakeAmount) < 0.1
+                        ? "Minimum stake is 0.1 CELO"
+                        : !hasEnoughBalance
+                          ? `Need ${Number(stakeAmount).toFixed(4)} CELO, have ${Number(userBalance).toFixed(4)} CELO`
+                          : match.status !== 'active'
+                            ? "This match is not accepting stakes"
+                            : ""}
+              </p>
+            )}
             
             {/* Debug Info (remove in production) */}
             {process.env.NODE_ENV === 'development' && (

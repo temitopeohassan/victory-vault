@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useReadContract, useSendTransaction, useWaitForTransactionReceipt, useAccount, useChainId, useSwitchChain } from 'wagmi'
 import { getAccount } from 'wagmi/actions'
 import { CONTRACT_ADDRESS, DIVVI_CONSUMER } from './config'
-import { formatEther, parseEther, encodeFunctionData } from 'viem'
+import { parseEther, encodeFunctionData } from 'viem'
 import { celo } from 'wagmi/chains'
 import { getReferralTag, submitReferral } from '@divvi/referral-sdk'
 
@@ -67,152 +67,216 @@ export function useMatchData(matchId: `0x${string}` | string) {
     abi: VICTORY_VAULT_ABI,
     functionName: 'matchesById',
     args: [hash],
+    chainId: celo.id, // CRITICAL: Force Celo chain for reads
   })
 }
 
 export function useStake() {
   const { address, chainId: currentChainId, chain } = useAccount()
   const chainId = useChainId()
-  const { switchChain } = useSwitchChain()
-  const { sendTransaction, data: hash, isPending, error } = useSendTransaction()
+  const { switchChain, isPending: isSwitching } = useSwitchChain()
+  const { sendTransaction, data: hash, isPending: isSending, error: sendError, reset } = useSendTransaction()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+  
+  const [customError, setCustomError] = useState<Error | null>(null)
+  const error = customError || sendError
 
   // Submit referral when transaction is confirmed
   useEffect(() => {
     if (isSuccess && hash && address) {
       submitReferral({
         txHash: hash,
-        chainId,
+        chainId: celo.id, // Always use Celo chain ID
       }).catch((err) => {
-        // Log error but don't fail the transaction
-        console.warn('Failed to submit referral:', err)
+        console.warn('[useStake] Failed to submit referral:', err)
       })
     }
-  }, [isSuccess, hash, address, chainId])
+  }, [isSuccess, hash, address])
 
   const stake = async (matchId: string, outcome: 1 | 2, amountInCELO: string) => {
+    // Reset errors
+    setCustomError(null)
+    reset()
+    
     if (!address) {
-      throw new Error('Wallet not connected')
+      const err = new Error('Wallet not connected')
+      setCustomError(err)
+      throw err
     }
 
-    // Get the current chain ID - check multiple sources for reliability
-    // Use getAccount to get the latest chain state
+    // Get the current chain ID
     const account = getAccount()
     const activeChainId = account.chainId || currentChainId || chainId || chain?.id
-    console.log('Current chain ID:', activeChainId, 'Expected Celo:', celo.id)
+    
+    console.log('[useStake] Starting stake transaction:', {
+      activeChainId,
+      celoChainId: celo.id,
+      isOnCelo: activeChainId === celo.id,
+      address,
+      matchId,
+      outcome,
+      amountInCELO
+    })
     
     // CRITICAL: Ensure we're on Celo chain before sending transaction
-    // If not on Celo, the transaction will be sent on the wrong network (e.g., Ethereum)
-    if (activeChainId && activeChainId !== celo.id) {
-      console.warn(`Wallet is on chain ${activeChainId}, but transaction requires Celo (${celo.id})`)
+    if (activeChainId !== celo.id) {
+      console.warn(`[useStake] Wrong chain. Current: ${activeChainId}, Required: ${celo.id} (Celo)`)
       
+      if (!switchChain) {
+        const err = new Error(
+          'Your wallet does not support network switching. ' +
+          'Please manually switch to Celo network in your wallet settings.'
+        )
+        setCustomError(err)
+        throw err
+      }
+
       try {
-        console.log(`Attempting to switch from chain ${activeChainId} to Celo (${celo.id})`)
+        console.log(`[useStake] Switching from chain ${activeChainId} to Celo (${celo.id})`)
+        
         await switchChain({ chainId: celo.id })
         
-        // Wait for chain switch to complete and verify
-        // Poll for chain change since hooks might not update immediately
-        let attempts = 0
-        const maxAttempts = 15
+        // Wait for chain switch with timeout
+        const startTime = Date.now()
+        const maxWaitTime = 10000 // 10 seconds
         let switched = false
         
-        while (attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 300))
-          // Re-check the chain using getAccount to get fresh state
+        while (Date.now() - startTime < maxWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+          
           const updatedAccount = getAccount()
           const latestChainId = updatedAccount.chainId
           
           if (latestChainId === celo.id) {
-            console.log('Successfully switched to Celo')
+            console.log('[useStake] Successfully switched to Celo')
             switched = true
             break
           }
-          attempts++
         }
         
-        // Final check before proceeding
         if (!switched) {
           const finalAccount = getAccount()
           const finalChainId = finalAccount.chainId
+          
           if (finalChainId !== celo.id) {
-            throw new Error(
-              'Failed to switch to Celo network. ' +
-              'Please manually switch your wallet to Celo network before staking. ' +
-              `Current network: ${finalChainId || activeChainId}, Required: ${celo.id}. ` +
-              'The transaction requires CELO, not ETH.'
+            const err = new Error(
+              `Network switch timeout. Please manually switch to Celo network. ` +
+              `Current: chain ${finalChainId || activeChainId}, Required: Celo (${celo.id})`
             )
+            setCustomError(err)
+            throw err
           }
         }
+        
+        // Wait a bit more to ensure wallet is ready
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
       } catch (err: any) {
-        console.error('Chain switch error:', err)
-        if (err?.message?.includes('User rejected') || err?.message?.includes('rejected')) {
-          throw new Error(
-            'Network switch was rejected. ' +
-            'Please switch your wallet to Celo network manually, then try again. ' +
-            'The transaction requires CELO, not ETH.'
+        console.error('[useStake] Chain switch error:', err)
+        
+        if (err.message?.includes('User rejected') || 
+            err.message?.includes('rejected') || 
+            err.message?.includes('denied')) {
+          const error = new Error(
+            'You rejected the network switch. ' +
+            'Please manually switch to Celo network in your wallet and try again.'
           )
+          setCustomError(error)
+          throw error
         }
-        throw new Error(
-          'Please switch your wallet to Celo network to stake. ' +
-          'The transaction requires CELO, not ETH. ' +
-          `Current network: ${activeChainId}, Required: ${celo.id}`
+        
+        if (err instanceof Error && err.message.includes('manually switch')) {
+          throw err // Re-throw our custom error
+        }
+        
+        const error = new Error(
+          'Failed to switch to Celo network. ' +
+          'Please manually switch to Celo in your wallet settings.'
         )
+        setCustomError(error)
+        throw error
       }
-    } else if (!activeChainId) {
-      // If we can't determine the chain, it's safer to throw an error
-      throw new Error(
-        'Unable to determine current network. ' +
-        'Please ensure your wallet is connected to Celo network before staking.'
-      )
     }
     
-    // Double-check chain right before sending transaction
+    // Final verification before sending
     const preSendAccount = getAccount()
     const preSendChainId = preSendAccount.chainId
-    if (preSendChainId && preSendChainId !== celo.id) {
-      throw new Error(
-        `Transaction cannot be sent: Wallet is on network ${preSendChainId}, but Celo (${celo.id}) is required. ` +
-        'Please switch your wallet to Celo network and try again. The transaction requires CELO, not ETH.'
+    
+    console.log('[useStake] Pre-send verification:', {
+      preSendChainId,
+      celoChainId: celo.id,
+      isCorrectChain: preSendChainId === celo.id
+    })
+    
+    if (preSendChainId !== celo.id) {
+      const err = new Error(
+        `Transaction blocked: Wallet is on chain ${preSendChainId}, but Celo (${celo.id}) is required. ` +
+        'Please ensure your wallet is on Celo network.'
       )
+      setCustomError(err)
+      throw err
     }
 
-    // VictoryVault uses native CELO (18 decimals)
-    // Amount should be in CELO (e.g., "1" = 1 CELO = 1000000000000000000 wei)
-    const amountWei = parseEther(amountInCELO)
-    
-    // Convert matchId to bytes32 format
-    const matchIdBytes32 = matchId.startsWith('0x') 
-      ? (matchId.length === 66 ? matchId as `0x${string}` : `0x${matchId.slice(2).padStart(64, '0')}` as `0x${string}`)
-      : `0x${matchId.padStart(64, '0')}` as `0x${string}`
-    
-    // Step 1: Generate referral tag
-    const referralTag = getReferralTag({
-      user: address,
-      consumer: DIVVI_CONSUMER,
-    })
+    try {
+      // Parse amount to wei
+      const amountWei = parseEther(amountInCELO)
+      
+      // Convert matchId to bytes32
+      const matchIdBytes32 = matchId.startsWith('0x') 
+        ? (matchId.length === 66 ? matchId as `0x${string}` : `0x${matchId.slice(2).padStart(64, '0')}` as `0x${string}`)
+        : `0x${matchId.padStart(64, '0')}` as `0x${string}`
+      
+      console.log('[useStake] Preparing transaction:', {
+        matchIdBytes32,
+        outcome,
+        amountInCELO,
+        amountWei: amountWei.toString(),
+        contractAddress: CONTRACT_ADDRESS,
+        chainId: celo.id
+      })
+      
+      // Generate referral tag
+      const referralTag = getReferralTag({
+        user: address,
+        consumer: DIVVI_CONSUMER,
+      })
 
-    // Step 2: Encode function data
-    const functionData = encodeFunctionData({
-      abi: VICTORY_VAULT_ABI,
-      functionName: 'stake',
-      args: [matchIdBytes32, outcome],
-    })
+      // Encode function data
+      const functionData = encodeFunctionData({
+        abi: VICTORY_VAULT_ABI,
+        functionName: 'stake',
+        args: [matchIdBytes32, outcome],
+      })
 
-    // Step 3: Append referral tag to calldata
-    const dataWithReferral = (functionData + referralTag.slice(2)) as `0x${string}`
+      // Append referral tag
+      const dataWithReferral = (functionData + referralTag.slice(2)) as `0x${string}`
 
-    // Step 4: Send transaction with referral tag in calldata
-    // Chain is already switched to Celo above, so transaction will be on Celo
-    sendTransaction({
-      to: CONTRACT_ADDRESS,
-      data: dataWithReferral,
-      value: amountWei, // Native CELO value
-    })
+      console.log('[useStake] Sending transaction on Celo:', {
+        to: CONTRACT_ADDRESS,
+        value: amountWei.toString(),
+        chainId: celo.id
+      })
+
+      // CRITICAL: Explicitly specify chainId in sendTransaction
+      sendTransaction({
+        to: CONTRACT_ADDRESS,
+        data: dataWithReferral,
+        value: amountWei,
+        chainId: celo.id, // CRITICAL: Force Celo chain
+      })
+      
+      console.log('[useStake] Transaction sent')
+    } catch (err: any) {
+      console.error('[useStake] Transaction preparation error:', err)
+      const error = new Error(err.message || 'Failed to prepare transaction')
+      setCustomError(error)
+      throw error
+    }
   }
 
   return {
     stake,
-    isPending: isPending || isConfirming,
+    isPending: isSending || isConfirming || isSwitching,
     isSuccess,
     error,
     hash,
@@ -221,53 +285,47 @@ export function useStake() {
 
 export function useClaimReward() {
   const { address } = useAccount()
-  const chainId = useChainId()
   const { sendTransaction, data: hash, isPending, error } = useSendTransaction()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
-  // Submit referral when transaction is confirmed
   useEffect(() => {
     if (isSuccess && hash && address) {
       submitReferral({
         txHash: hash,
-        chainId,
+        chainId: celo.id,
       }).catch((err) => {
-        // Log error but don't fail the transaction
-        console.warn('Failed to submit referral:', err)
+        console.warn('[useClaimReward] Failed to submit referral:', err)
       })
     }
-  }, [isSuccess, hash, address, chainId])
+  }, [isSuccess, hash, address])
 
   const claimReward = async (matchId: string) => {
     if (!address) {
       throw new Error('Wallet not connected')
     }
 
-    // Convert matchId to bytes32 format
     const matchIdBytes32 = matchId.startsWith('0x') 
       ? (matchId.length === 66 ? matchId as `0x${string}` : `0x${matchId.slice(2).padStart(64, '0')}` as `0x${string}`)
       : `0x${matchId.padStart(64, '0')}` as `0x${string}`
     
-    // Step 1: Generate referral tag
     const referralTag = getReferralTag({
       user: address,
       consumer: DIVVI_CONSUMER,
     })
 
-    // Step 2: Encode function data
     const functionData = encodeFunctionData({
       abi: VICTORY_VAULT_ABI,
       functionName: 'claimReward',
       args: [matchIdBytes32],
     })
 
-    // Step 3: Append referral tag to calldata
     const dataWithReferral = (functionData + referralTag.slice(2)) as `0x${string}`
 
-    // Step 4: Send transaction with referral tag in calldata
+    // CRITICAL: Specify chainId
     sendTransaction({
       to: CONTRACT_ADDRESS,
       data: dataWithReferral,
+      chainId: celo.id,
     })
   }
 
@@ -282,53 +340,47 @@ export function useClaimReward() {
 
 export function useClaimRefund() {
   const { address } = useAccount()
-  const chainId = useChainId()
   const { sendTransaction, data: hash, isPending, error } = useSendTransaction()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
-  // Submit referral when transaction is confirmed
   useEffect(() => {
     if (isSuccess && hash && address) {
       submitReferral({
         txHash: hash,
-        chainId,
+        chainId: celo.id,
       }).catch((err) => {
-        // Log error but don't fail the transaction
-        console.warn('Failed to submit referral:', err)
+        console.warn('[useClaimRefund] Failed to submit referral:', err)
       })
     }
-  }, [isSuccess, hash, address, chainId])
+  }, [isSuccess, hash, address])
 
   const claimRefund = async (matchId: string) => {
     if (!address) {
       throw new Error('Wallet not connected')
     }
 
-    // Convert matchId to bytes32 format
     const matchIdBytes32 = matchId.startsWith('0x') 
       ? (matchId.length === 66 ? matchId as `0x${string}` : `0x${matchId.slice(2).padStart(64, '0')}` as `0x${string}`)
       : `0x${matchId.padStart(64, '0')}` as `0x${string}`
     
-    // Step 1: Generate referral tag
     const referralTag = getReferralTag({
       user: address,
       consumer: DIVVI_CONSUMER,
     })
 
-    // Step 2: Encode function data
     const functionData = encodeFunctionData({
       abi: VICTORY_VAULT_ABI,
       functionName: 'claimRefund',
       args: [matchIdBytes32],
     })
 
-    // Step 3: Append referral tag to calldata
     const dataWithReferral = (functionData + referralTag.slice(2)) as `0x${string}`
 
-    // Step 4: Send transaction with referral tag in calldata
+    // CRITICAL: Specify chainId
     sendTransaction({
       to: CONTRACT_ADDRESS,
       data: dataWithReferral,
+      chainId: celo.id,
     })
   }
 
@@ -340,4 +392,3 @@ export function useClaimRefund() {
     hash,
   }
 }
-
